@@ -35,6 +35,7 @@ export interface SavingsGoal {
   name: string;
   targetAmount: number;
   currentAmount: number;
+  projectedAmount?: number; // Projected savings by target date
   targetDate: Date;
   isJoint: boolean;
   priority: 'low' | 'medium' | 'high';
@@ -48,6 +49,8 @@ export interface Debt {
   name: string;
   totalAmount: number;
   remainingAmount: number;
+  projectedPayoff?: number; // Projected amount to be paid
+  actualPayoff?: number; // Actual amount paid so far
   interestRate: number;
   minimumPayment: number;
   dueDate: Date;
@@ -63,6 +66,8 @@ export interface Investment {
   type: string;
   amount: number;
   currentValue: number;
+  projectedValue?: number; // Projected value
+  actualValue?: number; // Actual current value
   purchaseDate: Date;
   isJoint: boolean;
   createdAt: Date;

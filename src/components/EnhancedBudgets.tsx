@@ -13,6 +13,13 @@ interface Budget {
   id: string;
   name: string;
   category: string;
+  projectedMonthly: number;
+  actualMonthly: number;
+  projectedWeekly: number;
+  actualWeekly: number;
+  projectedYearly: number;
+  actualYearly: number;
+  // Legacy fields for compatibility
   monthlyAmount: number;
   weeklyAmount: number;
   yearlyAmount: number;
@@ -28,9 +35,51 @@ export default function EnhancedBudgets() {
   
   // Mock data - would come from API
   const budgets: Budget[] = [
-    { id: '1', name: 'Food Budget', category: 'Food', monthlyAmount: 1200, weeklyAmount: 300, yearlyAmount: 14400, spent: 850 },
-    { id: '2', name: 'Health Budget', category: 'Health/Medical', monthlyAmount: 1300, weeklyAmount: 325, yearlyAmount: 15600, spent: 1100 },
-    { id: '3', name: 'Transport Budget', category: 'Transportation', monthlyAmount: 465, weeklyAmount: 116.25, yearlyAmount: 5580, spent: 420 },
+    { 
+      id: '1', 
+      name: 'Food Budget', 
+      category: 'Food', 
+      projectedMonthly: 1200, 
+      actualMonthly: 850,
+      projectedWeekly: 300, 
+      actualWeekly: 212.5,
+      projectedYearly: 14400, 
+      actualYearly: 10200,
+      monthlyAmount: 1200, 
+      weeklyAmount: 300, 
+      yearlyAmount: 14400, 
+      spent: 850 
+    },
+    { 
+      id: '2', 
+      name: 'Health Budget', 
+      category: 'Health/Medical', 
+      projectedMonthly: 1300, 
+      actualMonthly: 1100,
+      projectedWeekly: 325, 
+      actualWeekly: 275,
+      projectedYearly: 15600, 
+      actualYearly: 13200,
+      monthlyAmount: 1300, 
+      weeklyAmount: 325, 
+      yearlyAmount: 15600, 
+      spent: 1100 
+    },
+    { 
+      id: '3', 
+      name: 'Transport Budget', 
+      category: 'Transportation', 
+      projectedMonthly: 465, 
+      actualMonthly: 420,
+      projectedWeekly: 116.25, 
+      actualWeekly: 105,
+      projectedYearly: 5580, 
+      actualYearly: 5040,
+      monthlyAmount: 465, 
+      weeklyAmount: 116.25, 
+      yearlyAmount: 5580, 
+      spent: 420 
+    },
   ];
   
   const totalIncome = selectedPeriod === 'weekly' ? 1028.75 : selectedPeriod === 'monthly' ? 4115 : 49380;
@@ -162,13 +211,19 @@ export default function EnhancedBudgets() {
         
         <div className="divide-y">
           {budgets.map(budget => {
-            const amount = selectedPeriod === 'weekly' ? budget.weeklyAmount :
-                          selectedPeriod === 'monthly' ? budget.monthlyAmount :
-                          budget.yearlyAmount;
+            // Get projected and actual based on period
+            const projected = selectedPeriod === 'weekly' ? budget.projectedWeekly :
+                             selectedPeriod === 'monthly' ? budget.projectedMonthly :
+                             budget.projectedYearly;
             
-            const spent = convertBudgetAmount(budget.spent, 'monthly', selectedPeriod);
-            const remaining = amount - spent;
-            const { percentage, status, color } = calculateBudgetProgress(spent, amount);
+            const actual = selectedPeriod === 'weekly' ? budget.actualWeekly :
+                          selectedPeriod === 'monthly' ? budget.actualMonthly :
+                          budget.actualYearly;
+            
+            const difference = projected - actual;
+            const percentOfProjected = (actual / projected) * 100;
+            const isUnderBudget = actual <= projected;
+            const { percentage, status, color } = calculateBudgetProgress(actual, projected);
             
             return (
               <div key={budget.id} className="p-4 hover:bg-gray-50">
@@ -178,9 +233,19 @@ export default function EnhancedBudgets() {
                     <p className="text-sm text-gray-600">{budget.name}</p>
                   </div>
                   <div className="text-right flex-1">
-                    <div className="text-lg font-bold">₪{spent.toFixed(2)} / ₪{amount.toFixed(2)}</div>
-                    <div className="text-sm" style={{ color }}>
-                      {remaining >= 0 ? `₪${remaining.toFixed(2)} remaining` : `₪${Math.abs(remaining).toFixed(2)} over`}
+                    <div className="grid grid-cols-2 gap-4 text-sm mb-2">
+                      <div>
+                        <div className="text-xs text-gray-500">Projected</div>
+                        <div className="font-semibold text-blue-600">₪{projected.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-500">Actual</div>
+                        <div className="font-semibold text-gray-900">₪{actual.toFixed(2)}</div>
+                      </div>
+                    </div>
+                    <div className="text-sm font-medium" style={{ color: isUnderBudget ? '#10b981' : '#ef4444' }}>
+                      {isUnderBudget ? '✓' : '⚠'} {isUnderBudget ? 'Under' : 'Over'} by ₪{Math.abs(difference).toFixed(2)}
+                      <span className="text-xs ml-1">({percentOfProjected.toFixed(1)}%)</span>
                     </div>
                   </div>
                   <div className="flex gap-2 ml-4">
@@ -231,11 +296,107 @@ export default function EnhancedBudgets() {
         </div>
       </div>
       
-      {/* Budget vs Actual Chart Placeholder */}
+      {/* Projected vs Actual Comparison Chart */}
       <div className="mt-6 bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold mb-4">Budget vs Actual</h2>
-        <div className="h-64 flex items-center justify-center text-gray-400">
-          Chart visualization would go here
+        <h2 className="text-xl font-semibold mb-4">Projected vs Actual Comparison</h2>
+        
+        <div className="space-y-4">
+          {budgets.map(budget => {
+            const projected = selectedPeriod === 'weekly' ? budget.projectedWeekly :
+                             selectedPeriod === 'monthly' ? budget.projectedMonthly :
+                             budget.projectedYearly;
+            
+            const actual = selectedPeriod === 'weekly' ? budget.actualWeekly :
+                          selectedPeriod === 'monthly' ? budget.actualMonthly :
+                          budget.actualYearly;
+            
+            const maxAmount = Math.max(projected, actual);
+            const projectedWidth = (projected / maxAmount) * 100;
+            const actualWidth = (actual / maxAmount) * 100;
+            const isUnderBudget = actual <= projected;
+            
+            return (
+              <div key={budget.id} className="border-b border-gray-200 pb-4 last:border-0">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="font-semibold text-gray-900">{budget.category}</h3>
+                  <div className="text-sm">
+                    <span className={`font-medium ${isUnderBudget ? 'text-green-600' : 'text-red-600'}`}>
+                      {isUnderBudget ? 'Under' : 'Over'} Budget
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Projected Bar */}
+                <div className="mb-2">
+                  <div className="flex justify-between items-center text-xs text-gray-600 mb-1">
+                    <span>Projected</span>
+                    <span className="font-semibold">₪{projected.toFixed(2)}</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-6">
+                    <div
+                      className="bg-blue-500 h-6 rounded-full flex items-center justify-end pr-2 text-xs text-white font-medium"
+                      style={{ width: `${projectedWidth}%` }}
+                    >
+                      {projectedWidth > 20 && `${projectedWidth.toFixed(0)}%`}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Actual Bar */}
+                <div>
+                  <div className="flex justify-between items-center text-xs text-gray-600 mb-1">
+                    <span>Actual</span>
+                    <span className="font-semibold">₪{actual.toFixed(2)}</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-6">
+                    <div
+                      className={`h-6 rounded-full flex items-center justify-end pr-2 text-xs text-white font-medium ${
+                        isUnderBudget ? 'bg-green-500' : 'bg-red-500'
+                      }`}
+                      style={{ width: `${actualWidth}%` }}
+                    >
+                      {actualWidth > 20 && `${actualWidth.toFixed(0)}%`}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Difference */}
+                <div className="mt-2 text-sm text-right">
+                  <span className={isUnderBudget ? 'text-green-600' : 'text-red-600'}>
+                    {isUnderBudget ? 'Saved' : 'Overspent'}: ₪{Math.abs(projected - actual).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        
+        {/* Summary */}
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <div className="text-sm text-gray-600">Total Projected</div>
+              <div className="text-xl font-bold text-blue-600">
+                ₪{budgets.reduce((sum, b) => sum + (selectedPeriod === 'weekly' ? b.projectedWeekly : selectedPeriod === 'monthly' ? b.projectedMonthly : b.projectedYearly), 0).toFixed(2)}
+              </div>
+            </div>
+            <div>
+              <div className="text-sm text-gray-600">Total Actual</div>
+              <div className="text-xl font-bold text-gray-900">
+                ₪{budgets.reduce((sum, b) => sum + (selectedPeriod === 'weekly' ? b.actualWeekly : selectedPeriod === 'monthly' ? b.actualMonthly : b.actualYearly), 0).toFixed(2)}
+              </div>
+            </div>
+            <div>
+              <div className="text-sm text-gray-600">Difference</div>
+              <div className={`text-xl font-bold ${
+                budgets.reduce((sum, b) => sum + (selectedPeriod === 'weekly' ? b.projectedWeekly - b.actualWeekly : selectedPeriod === 'monthly' ? b.projectedMonthly - b.actualMonthly : b.projectedYearly - b.actualYearly), 0) >= 0
+                  ? 'text-green-600'
+                  : 'text-red-600'
+              }`}>
+                ₪{Math.abs(budgets.reduce((sum, b) => sum + (selectedPeriod === 'weekly' ? b.projectedWeekly - b.actualWeekly : selectedPeriod === 'monthly' ? b.projectedMonthly - b.actualMonthly : b.projectedYearly - b.actualYearly), 0)).toFixed(2)}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
