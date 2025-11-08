@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Edit2, Trash2 } from 'lucide-react';
 import { BudgetPeriodType } from '../lib/enhanced-schema';
 import {
   convertBudgetAmount,
@@ -172,15 +173,35 @@ export default function EnhancedBudgets() {
             return (
               <div key={budget.id} className="p-4 hover:bg-gray-50">
                 <div className="flex justify-between items-start mb-2">
-                  <div>
+                  <div className="flex-1">
                     <h3 className="font-semibold">{budget.category}</h3>
                     <p className="text-sm text-gray-600">{budget.name}</p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right flex-1">
                     <div className="text-lg font-bold">₪{spent.toFixed(2)} / ₪{amount.toFixed(2)}</div>
                     <div className="text-sm" style={{ color }}>
                       {remaining >= 0 ? `₪${remaining.toFixed(2)} remaining` : `₪${Math.abs(remaining).toFixed(2)} over`}
                     </div>
+                  </div>
+                  <div className="flex gap-2 ml-4">
+                    <button
+                      onClick={() => alert(`Edit budget: ${budget.name}`)}
+                      className="text-blue-600 hover:text-blue-900 p-1"
+                      title="Edit budget"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Are you sure you want to delete "${budget.name}"?`)) {
+                          alert(`Budget "${budget.name}" deleted!`);
+                        }
+                      }}
+                      className="text-red-600 hover:text-red-900 p-1"
+                      title="Delete budget"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
                 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Edit2, Trash2 } from 'lucide-react';
 import { EnhancedTransaction } from '../lib/enhanced-schema';
 import {
   calculatePendingReimbursements,
@@ -201,7 +202,7 @@ export function ReimbursementManagementPage() {
                 </div>
               </div>
               
-              <div className="mt-3 flex gap-2">
+              <div className="mt-3 flex gap-2 items-center">
                 <button className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600">
                   Mark Received
                 </button>
@@ -211,6 +212,26 @@ export function ReimbursementManagementPage() {
                 <button className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600">
                   Link to Income
                 </button>
+                <div className="ml-auto flex gap-2">
+                  <button
+                    onClick={() => alert(`Edit reimbursement: ${transaction.description}`)}
+                    className="text-blue-600 hover:text-blue-900 p-1"
+                    title="Edit"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm(`Are you sure you want to delete this reimbursement?`)) {
+                        alert(`Reimbursement deleted!`);
+                      }
+                    }}
+                    className="text-red-600 hover:text-red-900 p-1"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
