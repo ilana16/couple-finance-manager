@@ -11,6 +11,7 @@ import InvestmentsPage from './InvestmentsPage';
 import ReportsPage from './ReportsPage';
 import NotesPage from './NotesPage';
 import RemindersPage from './RemindersPage';
+import SettingsPage from './SettingsPage';
 
 
 export default function SecureApp() {
@@ -166,10 +167,6 @@ function BillItem({ name, amount, dueDate }: any) {
 }
 
 // Placeholder pages
-function SettingsPage() {
-  return <PlaceholderPage title="Settings" description="Customize your experience" />;
-}
-
 function PlaceholderPage({ title, description }: { title: string; description: string }) {
   return (
     <div className="p-6 max-w-7xl mx-auto">
