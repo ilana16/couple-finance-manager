@@ -199,7 +199,7 @@ export default function SidebarLayout({ children, currentPage, onNavigate }: Sid
               </div>
             </div>
 
-            <nav className="flex-1 overflow-y-auto p-4" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+            <nav className="flex-1 overflow-y-auto p-4" style={{ maxHeight: 'calc(100vh - 200px)', WebkitOverflowScrolling: 'touch' }}>
               <ul className="space-y-1">
                 {menuItems.map((item) => {
                   const Icon = item.icon;
@@ -229,7 +229,7 @@ export default function SidebarLayout({ children, currentPage, onNavigate }: Sid
       )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
         {children}
       </main>
     </div>

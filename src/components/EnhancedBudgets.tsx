@@ -66,8 +66,8 @@ function NewBudgetModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-md w-full p-6">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div className="bg-white rounded-lg max-w-md w-full p-6 my-8">
         <h2 className="text-2xl font-bold mb-4">New Budget</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -178,8 +178,8 @@ function EditBudgetModal({ budget, onClose }: { budget: Budget; onClose: () => v
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-md w-full p-6">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div className="bg-white rounded-lg max-w-md w-full p-6 my-8">
         <h2 className="text-2xl font-bold mb-4">Edit Budget</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -610,8 +610,8 @@ export default function EnhancedBudgets() {
       )}
       
       {showImportFromPredictions && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className="bg-white rounded-lg max-w-md w-full p-6 my-8">
             <h2 className="text-2xl font-bold mb-4">Import from Predictions</h2>
             <div className="space-y-4">
               <p className="text-gray-700">

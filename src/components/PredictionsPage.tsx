@@ -359,8 +359,8 @@ function CategoryFormModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-md w-full p-6">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div className="bg-white rounded-lg max-w-md w-full p-6 my-8">
         <h2 className="text-2xl font-bold mb-4">
           Add {type === 'income' ? 'Income' : 'Expense'} Category
         </h2>

@@ -248,7 +248,7 @@ function NoteModal({ note, onClose, onSave }: any) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6">
         <h2 className="text-2xl font-bold mb-4">
           {note ? 'Edit Note' : 'Add Note'}
