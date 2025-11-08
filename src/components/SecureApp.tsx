@@ -7,7 +7,11 @@ import { ReimbursementManagementPage } from './ReimbursementWidget';
 import TransactionsPage from './TransactionsPage';
 import GoalsPage from './GoalsPage';
 import DebtsPage from './DebtsPage';
-import { initializeDemoData } from '../lib/storage';
+import InvestmentsPage from './InvestmentsPage';
+import ReportsPage from './ReportsPage';
+import NotesPage from './NotesPage';
+import RemindersPage from './RemindersPage';
+
 
 export default function SecureApp() {
   return (
@@ -22,13 +26,6 @@ export default function SecureApp() {
 function MainApp() {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const { user } = useAuth();
-
-  // Initialize demo data on first load
-  useEffect(() => {
-    if (user) {
-      initializeDemoData(user.id);
-    }
-  }, [user]);
 
   const renderPage = () => {
     switch (currentPage) {
@@ -169,22 +166,6 @@ function BillItem({ name, amount, dueDate }: any) {
 }
 
 // Placeholder pages
-function InvestmentsPage() {
-  return <PlaceholderPage title="Investments" description="Monitor your investment portfolio" />;
-}
-
-function ReportsPage() {
-  return <PlaceholderPage title="Reports" description="Analyze your financial trends" />;
-}
-
-function NotesPage() {
-  return <PlaceholderPage title="Shared Notes" description="Collaborate with your partner" />;
-}
-
-function RemindersPage() {
-  return <PlaceholderPage title="Reminders" description="Never miss important financial tasks" />;
-}
-
 function SettingsPage() {
   return <PlaceholderPage title="Settings" description="Customize your experience" />;
 }

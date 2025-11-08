@@ -235,15 +235,7 @@ function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-          <p className="text-xs text-gray-600 text-center mb-2">Login Credentials:</p>
-          <p className="text-xs text-gray-700 text-center">
-            <strong>Ilana:</strong> Username: Ilana / Password: 2527
-          </p>
-          <p className="text-xs text-gray-700 text-center">
-            <strong>Binyomin:</strong> Username: Binyomin / Password: 1221
-          </p>
-        </div>
+
       </div>
     </div>
   );
