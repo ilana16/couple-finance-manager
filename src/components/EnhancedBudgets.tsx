@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Edit2, Trash2 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
-import { budgetStorage } from '../lib/storage';
+import { budgetStorage, transactionStorage } from '../lib/storage';
 import { BudgetPeriodType } from '../lib/enhanced-schema';
 import {
   convertBudgetAmount,
@@ -19,19 +19,31 @@ interface Budget {
   weeklyAmount: number;
   yearlyAmount: number;
   spent: number;
+  isJoint: boolean;
   startingBalance?: number;
 }
 
 // Edit Budget Modal Component
 // New Budget Modal Component
 function NewBudgetModal({ onClose }: { onClose: () => void }) {
-  const { user } = useAuth();
+  const { user, viewMode } = useAuth();
+  const [expenseCategories, setExpenseCategories] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     category: '',
     monthlyAmount: 0,
-    spent: 0,
     isJoint: true,
   });
+
+  useEffect(() => {
+    // Load expense categories from Settings
+    const stored = localStorage.getItem('couple_fin_expense_categories');
+    if (stored) {
+      setExpenseCategories(JSON.parse(stored));
+    } else {
+      // Default categories if none exist
+      setExpenseCategories(['Food', 'Transportation', 'Housing', 'Utilities', 'Entertainment', 'Healthcare', 'Other']);
+    }
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +58,7 @@ function NewBudgetModal({ onClose }: { onClose: () => void }) {
       monthlyAmount: formData.monthlyAmount,
       weeklyAmount,
       yearlyAmount,
-      spent: formData.spent,
+      spent: 0, // Will be calculated from transactions
       isJoint: formData.isJoint,
     });
 
@@ -62,14 +74,20 @@ function NewBudgetModal({ onClose }: { onClose: () => void }) {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Category
             </label>
-            <input
-              type="text"
+            <select
               value={formData.category}
               onChange={(e) => setFormData({ ...formData, category: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              placeholder="e.g., Food, Transportation, Housing"
               required
-            />
+            >
+              <option value="">Select a category...</option>
+              {expenseCategories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Manage categories in Settings
+            </p>
           </div>
           
           <div>
@@ -84,19 +102,6 @@ function NewBudgetModal({ onClose }: { onClose: () => void }) {
               className="w-full px-3 py-2 border border-gray-300 rounded-md"
               placeholder="Maximum amount to spend"
               required
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Amount Spent (₪)
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={formData.spent}
-              onChange={(e) => setFormData({ ...formData, spent: parseFloat(e.target.value) || 0 })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
             />
           </div>
           
@@ -136,11 +141,22 @@ function NewBudgetModal({ onClose }: { onClose: () => void }) {
 // Edit Budget Modal Component
 function EditBudgetModal({ budget, onClose }: { budget: Budget; onClose: () => void }) {
   const { user } = useAuth();
+  const [expenseCategories, setExpenseCategories] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     category: budget.category,
     monthlyAmount: budget.monthlyAmount,
-    spent: budget.spent,
+    isJoint: budget.isJoint,
   });
+
+  useEffect(() => {
+    // Load expense categories from Settings
+    const stored = localStorage.getItem('couple_fin_expense_categories');
+    if (stored) {
+      setExpenseCategories(JSON.parse(stored));
+    } else {
+      setExpenseCategories(['Food', 'Transportation', 'Housing', 'Utilities', 'Entertainment', 'Healthcare', 'Other']);
+    }
+  }, []);;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,7 +170,8 @@ function EditBudgetModal({ budget, onClose }: { budget: Budget; onClose: () => v
       monthlyAmount: formData.monthlyAmount,
       weeklyAmount,
       yearlyAmount,
-      spent: formData.spent,
+      spent: budget.spent, // Keep existing calculated spent
+      isJoint: formData.isJoint,
     });
 
     onClose();
@@ -169,13 +186,20 @@ function EditBudgetModal({ budget, onClose }: { budget: Budget; onClose: () => v
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Category
             </label>
-            <input
-              type="text"
+            <select
               value={formData.category}
               onChange={(e) => setFormData({ ...formData, category: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md"
               required
-            />
+            >
+              <option value="">Select a category...</option>
+              {expenseCategories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Manage categories in Settings
+            </p>
           </div>
           
           <div>
@@ -193,18 +217,10 @@ function EditBudgetModal({ budget, onClose }: { budget: Budget; onClose: () => v
             />
           </div>
           
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Amount Spent (₪)
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={formData.spent}
-              onChange={(e) => setFormData({ ...formData, spent: parseFloat(e.target.value) || 0 })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              required
-            />
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+            <p className="text-sm text-blue-800">
+              <strong>Amount Spent</strong> will be calculated automatically from your transactions in this category.
+            </p>
           </div>
 
           <div className="flex gap-2 pt-4">
@@ -246,16 +262,29 @@ export default function EnhancedBudgets() {
     const includeJoint = viewMode === 'joint';
     const storageBudgets = budgetStorage.getByUser(user.id, includeJoint);
     
-    const convertedBudgets: Budget[] = storageBudgets.map(b => ({
-      id: b.id,
-      name: b.category,
-      category: b.category,
-
-      monthlyAmount: b.monthlyAmount,
-      weeklyAmount: b.weeklyAmount,
-      yearlyAmount: b.yearlyAmount,
-      spent: b.spent,
-    }));
+    // Get all transactions to calculate spent amounts
+    const allTransactions = transactionStorage.getByUser(user.id, includeJoint);
+    
+    const convertedBudgets: Budget[] = storageBudgets.map(b => {
+      // Calculate spent from transactions matching this category
+      const categoryTransactions = allTransactions.filter(
+        t => t.category === b.category && t.type === 'expense'
+      );
+      
+      // Sum up all expense transactions in this category
+      const calculatedSpent = categoryTransactions.reduce((sum, t) => sum + t.amount, 0);
+      
+      return {
+        id: b.id,
+        name: b.category,
+        category: b.category,
+        monthlyAmount: b.monthlyAmount,
+        weeklyAmount: b.weeklyAmount,
+        yearlyAmount: b.yearlyAmount,
+        spent: calculatedSpent, // Auto-calculated from transactions
+        isJoint: b.isJoint,
+      };
+    });
     
     setBudgets(convertedBudgets);
   };
@@ -271,7 +300,30 @@ export default function EnhancedBudgets() {
     setEditingBudget(budget);
   };
 
-  const totalIncome = selectedPeriod === 'weekly' ? 1028.75 : selectedPeriod === 'monthly' ? 4115 : 49380;
+  // Calculate total income from Predictions page
+  const calculateTotalIncome = () => {
+    if (!user) return 0;
+    const saved = localStorage.getItem(`predictions_${user.id}`);
+    if (!saved) return 0;
+    
+    const predictions = JSON.parse(saved);
+    const incomePredictions = predictions.income || [];
+    
+    // Convert all income to monthly, then to selected period
+    const monthlyIncome = incomePredictions.reduce((sum: number, pred: any) => {
+      let monthlyAmount = pred.amount;
+      if (pred.frequency === 'weekly') monthlyAmount = pred.amount * 4.33;
+      if (pred.frequency === 'yearly') monthlyAmount = pred.amount / 12;
+      return sum + monthlyAmount;
+    }, 0);
+    
+    // Convert to selected period
+    if (selectedPeriod === 'weekly') return monthlyIncome / 4.33;
+    if (selectedPeriod === 'yearly') return monthlyIncome * 12;
+    return monthlyIncome;
+  };
+  
+  const totalIncome = calculateTotalIncome();
   const startingBalance = 0;
   
   const totalBudgeted = budgets.reduce((sum, b) => {
