@@ -16,6 +16,7 @@ export interface Transaction {
   recurringFrequency?: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'yearly' | 'custom';
   customRecurringValue?: number; // For custom: the number (e.g., 3 for "every 3 days")
   customRecurringUnit?: 'days' | 'weeks' | 'months' | 'years'; // For custom: the unit
+  dayOfMonth?: number; // For monthly recurring: 1-31
   recurringEndDate?: Date; // Optional end date for recurring transactions
   parentTransactionId?: string; // Links to parent if this is a generated recurring transaction
   isJoint: boolean;

@@ -6,6 +6,7 @@ interface CategoryPrediction {
   category: string;
   amount: number;
   frequency: 'weekly' | 'monthly' | 'yearly';
+  dayOfMonth?: number; // For monthly items: 1-31
   notes?: string;
 }
 
@@ -347,6 +348,11 @@ function CategoryFormModal({
     notes: '',
   });
 
+  // Get categories from Settings
+  const categories = type === 'income' 
+    ? JSON.parse(localStorage.getItem('couple_fin_income_categories') || '[]')
+    : JSON.parse(localStorage.getItem('couple_fin_expense_categories') || '[]');
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit(formData);
@@ -361,16 +367,22 @@ function CategoryFormModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Category Name
+              Category
             </label>
-            <input
-              type="text"
+            <select
               value={formData.category}
               onChange={(e) => setFormData({ ...formData, category: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              placeholder={type === 'income' ? 'e.g., Salary, Freelance' : 'e.g., Rent, Food, Transportation'}
               required
-            />
+            >
+              <option value="">Select a category...</option>
+              {categories.map((cat: string) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Categories are managed in Settings → Categories
+            </p>
           </div>
 
           <div>
@@ -401,6 +413,26 @@ function CategoryFormModal({
               <option value="yearly">Yearly</option>
             </select>
           </div>
+
+          {formData.frequency === 'monthly' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Day of Month
+              </label>
+              <select
+                value={formData.dayOfMonth || 1}
+                onChange={(e) => setFormData({ ...formData, dayOfMonth: parseInt(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              >
+                {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                  <option key={day} value={day}>{day}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                When this {type} occurs each month
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

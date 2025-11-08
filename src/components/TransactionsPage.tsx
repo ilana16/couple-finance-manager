@@ -272,6 +272,7 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
     recurringFrequency: transaction?.recurringFrequency || 'monthly' as 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'yearly' | 'custom',
     customRecurringValue: transaction?.customRecurringValue || 1,
     customRecurringUnit: transaction?.customRecurringUnit || 'days' as 'days' | 'weeks' | 'months' | 'years',
+    dayOfMonth: transaction?.dayOfMonth || 1,
     recurringEndDate: transaction?.recurringEndDate ? new Date(transaction.recurringEndDate).toISOString().split('T')[0] : '',
     isJoint: transaction?.isJoint ?? true,
     notes: transaction?.notes || '',
@@ -284,10 +285,10 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
     setCreditSources(creditStorage.getByUser(user.id, includeJoint));
   }, [user, viewMode]);
 
-  const categories = [
-    'Food', 'Transportation', 'Health & Medical', 'Housing', 'Utilities',
-    'Entertainment', 'Shopping', 'Savings', 'Income', 'Other'
-  ];
+  // Get categories from Settings based on transaction type
+  const expenseCategories = JSON.parse(localStorage.getItem('couple_fin_expense_categories') || '[]');
+  const incomeCategories = JSON.parse(localStorage.getItem('couple_fin_income_categories') || '[]');
+  const categories = formData.type === 'income' ? incomeCategories : expenseCategories;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -307,6 +308,7 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
       recurringFrequency: formData.isRecurring ? formData.recurringFrequency : undefined,
       customRecurringValue: formData.isRecurring && formData.recurringFrequency === 'custom' ? formData.customRecurringValue : undefined,
       customRecurringUnit: formData.isRecurring && formData.recurringFrequency === 'custom' ? formData.customRecurringUnit : undefined,
+      dayOfMonth: formData.isRecurring && formData.recurringFrequency === 'monthly' ? formData.dayOfMonth : undefined,
       recurringEndDate: formData.isRecurring && formData.recurringEndDate ? new Date(formData.recurringEndDate) : undefined,
       isJoint: formData.isJoint,
       notes: formData.notes,
@@ -505,6 +507,23 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
                   <option value="custom">Custom</option>
                 </select>
               </div>
+              {formData.recurringFrequency === 'monthly' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Day of Month</label>
+                  <select
+                    value={formData.dayOfMonth || 1}
+                    onChange={(e) => setFormData({ ...formData, dayOfMonth: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                      <option key={day} value={day}>{day}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Day of the month when this transaction occurs
+                  </p>
+                </div>
+              )}
               {formData.recurringFrequency === 'custom' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
