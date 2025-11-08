@@ -115,7 +115,7 @@ export interface Account {
   name: string;
   type: 'checking' | 'savings' | 'cash' | 'other';
   balance: number;
-  currency: string;
+  currency: 'NIS' | 'USD' | 'EUR' | 'GBP' | 'JPY' | 'CAD' | 'AUD' | 'CHF';
   isJoint: boolean;
   institution?: string;
   accountNumber?: string;

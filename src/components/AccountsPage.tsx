@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, DollarSign, Building2 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { accountStorage, Account } from '../lib/storage';
+import { formatCurrency, getCurrencySymbol, convertCurrency, Currency } from '../lib/currencyUtils';
 
 export default function AccountsPage() {
   const { user, viewMode } = useAuth();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [displayCurrency, setDisplayCurrency] = useState<Currency>('NIS');
 
   useEffect(() => {
     loadAccounts();
@@ -38,7 +40,26 @@ export default function AccountsPage() {
     loadAccounts();
   };
 
-  const totalBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0);
+  // Calculate total balance in display currency
+  const totalBalance = accounts.reduce((sum, acc) => {
+    const convertedBalance = convertCurrency(acc.balance, acc.currency, displayCurrency);
+    return sum + convertedBalance;
+  }, 0);
+  
+  // Group accounts by currency
+  const accountsByCurrency = accounts.reduce((groups, acc) => {
+    if (!groups[acc.currency]) {
+      groups[acc.currency] = [];
+    }
+    groups[acc.currency].push(acc);
+    return groups;
+  }, {} as Record<Currency, Account[]>);
+  
+  const currencyTotals = Object.entries(accountsByCurrency).map(([currency, accs]) => ({
+    currency: currency as Currency,
+    total: accs.reduce((sum, acc) => sum + acc.balance, 0),
+    count: accs.length,
+  }));
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -61,11 +82,41 @@ export default function AccountsPage() {
 
       {/* Summary Card */}
       <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow-lg p-6 mb-6 text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-blue-100 text-sm mb-1">Total Balance</p>
-            <p className="text-4xl font-bold">₪{totalBalance.toFixed(2)}</p>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-2">
+              <p className="text-blue-100 text-sm">Total Balance</p>
+              <select
+                value={displayCurrency}
+                onChange={(e) => setDisplayCurrency(e.target.value as Currency)}
+                className="px-2 py-1 bg-blue-700 text-white text-sm rounded border border-blue-400 focus:outline-none focus:ring-2 focus:ring-white"
+              >
+                <option value="NIS">NIS</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+                <option value="JPY">JPY</option>
+                <option value="CAD">CAD</option>
+                <option value="AUD">AUD</option>
+                <option value="CHF">CHF</option>
+              </select>
+            </div>
+            <p className="text-4xl font-bold">{formatCurrency(totalBalance, displayCurrency)}</p>
             <p className="text-blue-100 text-sm mt-2">Across {accounts.length} account{accounts.length !== 1 ? 's' : ''}</p>
+            
+            {currencyTotals.length > 1 && (
+              <div className="mt-4 pt-4 border-t border-blue-400">
+                <p className="text-blue-100 text-xs mb-2">By Currency:</p>
+                <div className="flex flex-wrap gap-3">
+                  {currencyTotals.map(({ currency, total, count }) => (
+                    <div key={currency} className="bg-blue-700 bg-opacity-50 px-3 py-1 rounded">
+                      <span className="text-sm font-semibold">{formatCurrency(total, currency)}</span>
+                      <span className="text-xs text-blue-200 ml-2">({count})</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <DollarSign className="w-16 h-16 text-blue-200 opacity-50" />
         </div>
@@ -119,7 +170,7 @@ export default function AccountsPage() {
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-sm text-gray-600">Balance</span>
                     <span className={`text-2xl font-bold ${account.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      ₪{account.balance.toFixed(2)}
+                      {formatCurrency(account.balance, account.currency)}
                     </span>
                   </div>
                   
@@ -170,7 +221,7 @@ function AccountModal({ account, onClose, userId }: { account: Account | null; o
     name: account?.name || '',
     type: account?.type || 'checking' as 'checking' | 'savings' | 'cash' | 'other',
     balance: account?.balance || 0,
-    currency: account?.currency || 'ILS',
+    currency: account?.currency || 'NIS',
     institution: account?.institution || '',
     accountNumber: account?.accountNumber || '',
     isJoint: account?.isJoint || false,
@@ -251,15 +302,23 @@ function AccountModal({ account, onClose, userId }: { account: Account | null; o
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Currency
+                  Currency *
                 </label>
-                <input
-                  type="text"
+                <select
                   value={formData.currency}
-                  onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, currency: e.target.value as any })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                  placeholder="ILS, USD, EUR"
-                />
+                  required
+                >
+                  <option value="NIS">₪ NIS (Israeli Shekel)</option>
+                  <option value="USD">$ USD (US Dollar)</option>
+                  <option value="EUR">€ EUR (Euro)</option>
+                  <option value="GBP">£ GBP (British Pound)</option>
+                  <option value="JPY">¥ JPY (Japanese Yen)</option>
+                  <option value="CAD">$ CAD (Canadian Dollar)</option>
+                  <option value="AUD">$ AUD (Australian Dollar)</option>
+                  <option value="CHF">CHF (Swiss Franc)</option>
+                </select>
               </div>
 
               <div>
