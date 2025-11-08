@@ -9,6 +9,15 @@ export interface Transaction {
   amount: number;
   category: string;
   type: 'income' | 'expense';
+  paymentMethod: 'debit' | 'credit';
+  accountId?: string; // For debit transactions
+  creditSourceId?: string; // For credit transactions
+  isRecurring: boolean;
+  recurringFrequency?: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'yearly' | 'custom';
+  customRecurringValue?: number; // For custom: the number (e.g., 3 for "every 3 days")
+  customRecurringUnit?: 'days' | 'weeks' | 'months' | 'years'; // For custom: the unit
+  recurringEndDate?: Date; // Optional end date for recurring transactions
+  parentTransactionId?: string; // Links to parent if this is a generated recurring transaction
   isJoint: boolean;
   notes?: string;
   attachments?: string[];
@@ -24,6 +33,10 @@ export interface Budget {
   weeklyAmount: number;
   yearlyAmount: number;
   spent: number;
+  isRecurring?: boolean;
+  recurringFrequency?: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
+  customRecurringValue?: number;
+  customRecurringUnit?: 'days' | 'weeks' | 'months' | 'years';
   isJoint: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -96,6 +109,41 @@ export interface Reminder {
   updatedAt: Date;
 }
 
+export interface Account {
+  id: string;
+  userId: string;
+  name: string;
+  type: 'checking' | 'savings' | 'cash' | 'other';
+  balance: number;
+  currency: string;
+  isJoint: boolean;
+  institution?: string;
+  accountNumber?: string;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreditSource {
+  id: string;
+  userId: string;
+  name: string;
+  type: 'credit_card' | 'line_of_credit' | 'loan' | 'other';
+  creditLimit: number;
+  currentBalance: number;
+  availableCredit: number;
+  interestRate?: number;
+  paymentDayOfMonth: number; // Day of month to pay (1-31)
+  paymentOption: 'pay_all' | 'custom_amount'; // Payment preference
+  customPaymentAmount?: number; // Custom amount if paymentOption is 'custom_amount'
+  isJoint: boolean;
+  institution?: string;
+  accountNumber?: string;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Storage keys
 const KEYS = {
   TRANSACTIONS: 'couple_fin_transactions',
@@ -105,6 +153,8 @@ const KEYS = {
   INVESTMENTS: 'couple_fin_investments',
   NOTES: 'couple_fin_notes',
   REMINDERS: 'couple_fin_reminders',
+  ACCOUNTS: 'couple_fin_accounts',
+  CREDIT_SOURCES: 'couple_fin_credit_sources',
 };
 
 // Generic storage functions
@@ -388,6 +438,8 @@ export function initializeDemoData(userId: string) {
       amount: 150,
       category: 'Food',
       type: 'expense',
+      paymentMethod: 'debit',
+      isRecurring: false,
       isJoint: true,
     });
     
@@ -398,6 +450,8 @@ export function initializeDemoData(userId: string) {
       amount: 4115,
       category: 'Income',
       type: 'income',
+      paymentMethod: 'debit',
+      isRecurring: false,
       isJoint: false,
     });
   }
@@ -414,3 +468,168 @@ export function initializeDemoData(userId: string) {
     });
   }
 }
+
+// Accounts
+export const accountStorage = {
+  getAll: (): Account[] => getItems<Account>(KEYS.ACCOUNTS),
+  
+  getByUser: (userId: string, includeJoint: boolean = true): Account[] => {
+    return accountStorage.getAll().filter(a => 
+      a.userId === userId || (includeJoint && a.isJoint)
+    );
+  },
+  
+  getById: (id: string): Account | null => {
+    return accountStorage.getAll().find(a => a.id === id) || null;
+  },
+  
+  create: (data: Omit<Account, 'id' | 'createdAt' | 'updatedAt'>): Account => {
+    const account: Account = {
+      ...data,
+      id: generateId(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    const all = accountStorage.getAll();
+    setItems(KEYS.ACCOUNTS, [...all, account]);
+    return account;
+  },
+  
+  update: (id: string, data: Partial<Account>): Account | null => {
+    const all = accountStorage.getAll();
+    const index = all.findIndex(a => a.id === id);
+    
+    if (index === -1) return null;
+    
+    const updated = {
+      ...all[index],
+      ...data,
+      updatedAt: new Date(),
+    };
+    
+    all[index] = updated;
+    setItems(KEYS.ACCOUNTS, all);
+    return updated;
+  },
+  
+  delete: (id: string): boolean => {
+    const all = accountStorage.getAll();
+    const filtered = all.filter(a => a.id !== id);
+    
+    if (filtered.length === all.length) return false;
+    
+    setItems(KEYS.ACCOUNTS, filtered);
+    return true;
+  },
+  
+  // Update balance when transaction is added/removed
+  updateBalance: (accountId: string, amount: number, isIncome: boolean): void => {
+    const account = accountStorage.getById(accountId);
+    if (!account) return;
+    
+    const newBalance = isIncome 
+      ? account.balance + amount 
+      : account.balance - amount;
+    
+    accountStorage.update(accountId, { balance: newBalance });
+  },
+};
+
+// Credit Sources
+export const creditStorage = {
+  getAll: (): CreditSource[] => getItems<CreditSource>(KEYS.CREDIT_SOURCES),
+  
+  getByUser: (userId: string, includeJoint: boolean = true): CreditSource[] => {
+    return creditStorage.getAll().filter(c => 
+      c.userId === userId || (includeJoint && c.isJoint)
+    );
+  },
+  
+  getById: (id: string): CreditSource | null => {
+    return creditStorage.getAll().find(c => c.id === id) || null;
+  },
+  
+  create: (data: Omit<CreditSource, 'id' | 'createdAt' | 'updatedAt' | 'availableCredit'>): CreditSource => {
+    const availableCredit = data.creditLimit - data.currentBalance;
+    
+    const creditSource: CreditSource = {
+      ...data,
+      availableCredit,
+      id: generateId(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    const all = creditStorage.getAll();
+    setItems(KEYS.CREDIT_SOURCES, [...all, creditSource]);
+    return creditSource;
+  },
+  
+  update: (id: string, data: Partial<CreditSource>): CreditSource | null => {
+    const all = creditStorage.getAll();
+    const index = all.findIndex(c => c.id === id);
+    
+    if (index === -1) return null;
+    
+    const updated = {
+      ...all[index],
+      ...data,
+      updatedAt: new Date(),
+    };
+    
+    // Recalculate available credit
+    if (data.creditLimit !== undefined || data.currentBalance !== undefined) {
+      updated.availableCredit = updated.creditLimit - updated.currentBalance;
+    }
+    
+    all[index] = updated;
+    setItems(KEYS.CREDIT_SOURCES, all);
+    return updated;
+  },
+  
+  delete: (id: string): boolean => {
+    const all = creditStorage.getAll();
+    const filtered = all.filter(c => c.id !== id);
+    
+    if (filtered.length === all.length) return false;
+    
+    setItems(KEYS.CREDIT_SOURCES, filtered);
+    return true;
+  },
+  
+  // Update balance when credit transaction is made
+  updateBalance: (creditSourceId: string, amount: number, isPayment: boolean): void => {
+    const credit = creditStorage.getById(creditSourceId);
+    if (!credit) return;
+    
+    const newBalance = isPayment 
+      ? credit.currentBalance - amount 
+      : credit.currentBalance + amount;
+    
+    creditStorage.update(creditSourceId, { currentBalance: newBalance });
+  },
+  
+  // Make payment on credit account
+  makePayment: (creditSourceId: string, payFromAccountId: string): boolean => {
+    const credit = creditStorage.getById(creditSourceId);
+    const account = accountStorage.getById(payFromAccountId);
+    
+    if (!credit || !account) return false;
+    
+    const paymentAmount = credit.paymentOption === 'pay_all' 
+      ? credit.currentBalance 
+      : (credit.customPaymentAmount || 0);
+    
+    // Check if account has sufficient funds
+    if (account.balance < paymentAmount) return false;
+    
+    // Update credit balance
+    creditStorage.updateBalance(creditSourceId, paymentAmount, true);
+    
+    // Update account balance
+    accountStorage.updateBalance(payFromAccountId, paymentAmount, false);
+    
+    return true;
+  },
+};

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, ProtectedRoute, useAuth } from '../lib/auth';
-import { transactionStorage, reminderStorage } from '../lib/storage';
+import { transactionStorage, reminderStorage, accountStorage, creditStorage } from '../lib/storage';
 import SidebarLayout from '../layouts/SidebarLayout';
 import EnhancedBudgets from './EnhancedBudgets';
 import { FinancialHealthPage } from './FinancialHealthWidget';
@@ -9,6 +9,8 @@ import TransactionsPage from './TransactionsPage';
 import GoalsPage from './GoalsPage';
 import DebtsPage from './DebtsPage';
 import InvestmentsPage from './InvestmentsPage';
+import AccountsPage from './AccountsPage';
+import CreditPage from './CreditPage';
 import ReportsPage from './ReportsPage';
 import NotesPage from './NotesPage';
 import RemindersPage from './RemindersPage';
@@ -47,6 +49,10 @@ function MainApp() {
         return <DebtsPage />;
       case 'investments':
         return <InvestmentsPage />;
+      case 'accounts':
+        return <AccountsPage />;
+      case 'credit':
+        return <CreditPage />;
       case 'reports':
         return <ReportsPage />;
       case 'notes':
@@ -75,6 +81,9 @@ function DashboardPage() {
     monthlyIncome: 0,
     monthlyExpenses: 0,
     savingsRate: 0,
+    totalAccounts: 0,
+    totalCredit: 0,
+    availableCredit: 0,
   });
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [upcomingReminders, setUpcomingReminders] = useState<any[]>([]);
@@ -88,6 +97,15 @@ function DashboardPage() {
     if (!user) return;
     const includeJoint = viewMode === 'joint';
 
+    // Load accounts
+    const accounts = accountStorage.getByUser(user.id, includeJoint);
+    const totalAccountBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0);
+    
+    // Load credit sources
+    const credits = creditStorage.getByUser(user.id, includeJoint);
+    const totalCreditBalance = credits.reduce((sum, c) => sum + c.currentBalance, 0);
+    const totalAvailableCredit = credits.reduce((sum, c) => sum + c.availableCredit, 0);
+    
     // Load transactions
     const transactions = transactionStorage.getByUser(user.id, includeJoint);
     const sortedTransactions = transactions
@@ -120,10 +138,13 @@ function DashboardPage() {
     const savingsRate = income > 0 ? ((income - expenses) / income) * 100 : 0;
 
     setStats({
-      totalBalance: balance,
+      totalBalance: totalAccountBalance,
       monthlyIncome: income,
       monthlyExpenses: expenses,
       savingsRate,
+      totalAccounts: accounts.length,
+      totalCredit: totalCreditBalance,
+      availableCredit: totalAvailableCredit,
     });
 
     // Load upcoming reminders

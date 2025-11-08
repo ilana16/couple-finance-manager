@@ -15,6 +15,8 @@ import {
   X,
   Users,
   User,
+  Building2,
+  Wallet,
 } from 'lucide-react';
 
 interface SidebarLayoutProps {
@@ -30,6 +32,8 @@ export default function SidebarLayout({ children, currentPage, onNavigate }: Sid
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'transactions', label: 'Transactions', icon: DollarSign },
+    { id: 'accounts', label: 'Accounts', icon: Building2 },
+    { id: 'credit', label: 'Credit', icon: Wallet },
     { id: 'budgets', label: 'Budgets', icon: PieChart },
     { id: 'goals', label: 'Savings Goals', icon: Target },
     { id: 'debts', label: 'Debts', icon: CreditCard },

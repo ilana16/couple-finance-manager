@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/auth';
-import { transactionStorage, Transaction } from '../lib/storage';
+import { transactionStorage, accountStorage, creditStorage, Transaction, Account, CreditSource } from '../lib/storage';
 import { Plus, Search, Filter, Edit2, Trash2, Download, Upload } from 'lucide-react';
 
 export default function TransactionsPage() {
@@ -255,16 +255,34 @@ interface TransactionModalProps {
 }
 
 function TransactionModal({ transaction, onClose, onSave }: TransactionModalProps) {
-  const { user } = useAuth();
+  const { user, viewMode } = useAuth();
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [creditSources, setCreditSources] = useState<CreditSource[]>([]);
+  
   const [formData, setFormData] = useState({
     date: transaction?.date ? new Date(transaction.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
     description: transaction?.description || '',
     amount: transaction?.amount?.toString() || '',
     category: transaction?.category || 'Food',
     type: transaction?.type || 'expense' as 'income' | 'expense',
+    paymentMethod: transaction?.paymentMethod || 'debit' as 'debit' | 'credit',
+    accountId: transaction?.accountId || '',
+    creditSourceId: transaction?.creditSourceId || '',
+    isRecurring: transaction?.isRecurring ?? false,
+    recurringFrequency: transaction?.recurringFrequency || 'monthly' as 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'yearly' | 'custom',
+    customRecurringValue: transaction?.customRecurringValue || 1,
+    customRecurringUnit: transaction?.customRecurringUnit || 'days' as 'days' | 'weeks' | 'months' | 'years',
+    recurringEndDate: transaction?.recurringEndDate ? new Date(transaction.recurringEndDate).toISOString().split('T')[0] : '',
     isJoint: transaction?.isJoint ?? true,
     notes: transaction?.notes || '',
   });
+
+  useEffect(() => {
+    if (!user) return;
+    const includeJoint = viewMode === 'joint';
+    setAccounts(accountStorage.getByUser(user.id, includeJoint));
+    setCreditSources(creditStorage.getByUser(user.id, includeJoint));
+  }, [user, viewMode]);
 
   const categories = [
     'Food', 'Transportation', 'Health & Medical', 'Housing', 'Utilities',
@@ -282,6 +300,14 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
       amount: parseFloat(formData.amount),
       category: formData.category,
       type: formData.type,
+      paymentMethod: formData.paymentMethod,
+      accountId: formData.paymentMethod === 'debit' ? formData.accountId : undefined,
+      creditSourceId: formData.paymentMethod === 'credit' ? formData.creditSourceId : undefined,
+      isRecurring: formData.isRecurring,
+      recurringFrequency: formData.isRecurring ? formData.recurringFrequency : undefined,
+      customRecurringValue: formData.isRecurring && formData.recurringFrequency === 'custom' ? formData.customRecurringValue : undefined,
+      customRecurringUnit: formData.isRecurring && formData.recurringFrequency === 'custom' ? formData.customRecurringUnit : undefined,
+      recurringEndDate: formData.isRecurring && formData.recurringEndDate ? new Date(formData.recurringEndDate) : undefined,
       isJoint: formData.isJoint,
       notes: formData.notes,
     };
@@ -289,7 +315,14 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
     if (transaction) {
       transactionStorage.update(transaction.id, data);
     } else {
-      transactionStorage.create(data);
+      const newTransaction = transactionStorage.create(data);
+      
+      // Update account or credit balance
+      if (formData.paymentMethod === 'debit' && formData.accountId) {
+        accountStorage.updateBalance(formData.accountId, parseFloat(formData.amount), formData.type === 'income');
+      } else if (formData.paymentMethod === 'credit' && formData.creditSourceId) {
+        creditStorage.updateBalance(formData.creditSourceId, parseFloat(formData.amount), false);
+      }
     }
 
     onSave();
@@ -378,6 +411,139 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
               </label>
             </div>
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+            <div className="flex gap-4">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  value="debit"
+                  checked={formData.paymentMethod === 'debit'}
+                  onChange={(e) => setFormData({ ...formData, paymentMethod: 'debit', creditSourceId: '' })}
+                  className="mr-2"
+                />
+                Debit (Bank Account)
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  value="credit"
+                  checked={formData.paymentMethod === 'credit'}
+                  onChange={(e) => setFormData({ ...formData, paymentMethod: 'credit', accountId: '' })}
+                  className="mr-2"
+                />
+                Credit
+              </label>
+            </div>
+          </div>
+
+          {formData.paymentMethod === 'debit' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Account</label>
+              <select
+                value={formData.accountId}
+                onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              >
+                <option value="">Select an account</option>
+                {accounts.map(account => (
+                  <option key={account.id} value={account.id}>
+                    {account.name} - ₪{account.balance.toFixed(2)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {formData.paymentMethod === 'credit' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Credit Source</label>
+              <select
+                value={formData.creditSourceId}
+                onChange={(e) => setFormData({ ...formData, creditSourceId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              >
+                <option value="">Select a credit source</option>
+                {creditSources.map(credit => (
+                  <option key={credit.id} value={credit.id}>
+                    {credit.name} - Available: ₪{credit.availableCredit.toFixed(2)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={formData.isRecurring}
+                onChange={(e) => setFormData({ ...formData, isRecurring: e.target.checked })}
+                className="mr-2"
+              />
+              <span className="text-sm font-medium text-gray-700">Recurring Transaction</span>
+            </label>
+          </div>
+
+          {formData.isRecurring && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
+                <select
+                  value={formData.recurringFrequency}
+                  onChange={(e) => setFormData({ ...formData, recurringFrequency: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="biweekly">Bi-weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+              {formData.recurringFrequency === 'custom' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Every</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={formData.customRecurringValue}
+                      onChange={(e) => setFormData({ ...formData, customRecurringValue: parseInt(e.target.value) || 1 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="e.g., 3"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+                    <select
+                      value={formData.customRecurringUnit}
+                      onChange={(e) => setFormData({ ...formData, customRecurringUnit: e.target.value as any })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="days">Days</option>
+                      <option value="weeks">Weeks</option>
+                      <option value="months">Months</option>
+                      <option value="years">Years</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">End Date (Optional)</label>
+                <input
+                  type="date"
+                  value={formData.recurringEndDate}
+                  onChange={(e) => setFormData({ ...formData, recurringEndDate: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </>
+          )}
 
           <div>
             <label className="flex items-center">

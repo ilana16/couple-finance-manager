@@ -117,7 +117,7 @@ function ProfileSettings() {
 }
 
 function CategorySettings() {
-  const [categories, setCategories] = useState<string[]>([
+  const [expenseCategories, setExpenseCategories] = useState<string[]>([
     'Food',
     'Transportation',
     'Health & Medical',
@@ -125,70 +125,97 @@ function CategorySettings() {
     'Utilities',
     'Entertainment',
     'Shopping',
-    'Savings',
-    'Income',
     'Other'
   ]);
-  const [newCategory, setNewCategory] = useState('');
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [incomeCategories, setIncomeCategories] = useState<string[]>([
+    'Salary',
+    'Freelance',
+    'Investment Income',
+    'Rental Income',
+    'Business Income',
+    'Other Income'
+  ]);
+  const [newExpenseCategory, setNewExpenseCategory] = useState('');
+  const [newIncomeCategory, setNewIncomeCategory] = useState('');
+  const [showAddExpenseForm, setShowAddExpenseForm] = useState(false);
+  const [showAddIncomeForm, setShowAddIncomeForm] = useState(false);
 
-  const handleAddCategory = (e: React.FormEvent) => {
+  const handleAddExpenseCategory = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newCategory.trim() && !categories.includes(newCategory.trim())) {
-      setCategories([...categories, newCategory.trim()]);
-      setNewCategory('');
-      setShowAddForm(false);
-      
-      // Save to localStorage
-      localStorage.setItem('couple_fin_categories', JSON.stringify([...categories, newCategory.trim()]));
+    if (newExpenseCategory.trim() && !expenseCategories.includes(newExpenseCategory.trim())) {
+      const updated = [...expenseCategories, newExpenseCategory.trim()];
+      setExpenseCategories(updated);
+      setNewExpenseCategory('');
+      setShowAddExpenseForm(false);
+      localStorage.setItem('couple_fin_expense_categories', JSON.stringify(updated));
     }
   };
 
-  const handleDeleteCategory = (category: string) => {
-    if (confirm(`Are you sure you want to delete the category "${category}"?`)) {
-      const updated = categories.filter(c => c !== category);
-      setCategories(updated);
-      localStorage.setItem('couple_fin_categories', JSON.stringify(updated));
+  const handleAddIncomeCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newIncomeCategory.trim() && !incomeCategories.includes(newIncomeCategory.trim())) {
+      const updated = [...incomeCategories, newIncomeCategory.trim()];
+      setIncomeCategories(updated);
+      setNewIncomeCategory('');
+      setShowAddIncomeForm(false);
+      localStorage.setItem('couple_fin_income_categories', JSON.stringify(updated));
+    }
+  };
+
+  const handleDeleteExpenseCategory = (category: string) => {
+    if (confirm(`Are you sure you want to delete the expense category "${category}"?`)) {
+      const updated = expenseCategories.filter(c => c !== category);
+      setExpenseCategories(updated);
+      localStorage.setItem('couple_fin_expense_categories', JSON.stringify(updated));
+    }
+  };
+
+  const handleDeleteIncomeCategory = (category: string) => {
+    if (confirm(`Are you sure you want to delete the income category "${category}"?`)) {
+      const updated = incomeCategories.filter(c => c !== category);
+      setIncomeCategories(updated);
+      localStorage.setItem('couple_fin_income_categories', JSON.stringify(updated));
     }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {/* Expense Categories */}
       <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Manage Categories</h2>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Expense Categories</h2>
         <p className="text-gray-600 mb-4">
-          Customize the categories used for transactions and budgets
+          Categories for tracking expenses and spending
         </p>
 
         <div className="mb-4">
-          {!showAddForm ? (
+          {!showAddExpenseForm ? (
             <button
-              onClick={() => setShowAddForm(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              onClick={() => setShowAddExpenseForm(true)}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
             >
-              Add Category
+              Add Expense Category
             </button>
           ) : (
-            <form onSubmit={handleAddCategory} className="flex gap-2">
+            <form onSubmit={handleAddExpenseCategory} className="flex gap-2">
               <input
                 type="text"
-                value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value)}
-                placeholder="New category name..."
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                value={newExpenseCategory}
+                onChange={(e) => setNewExpenseCategory(e.target.value)}
+                placeholder="New expense category..."
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                 autoFocus
               />
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
               >
                 Add
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  setShowAddForm(false);
-                  setNewCategory('');
+                  setShowAddExpenseForm(false);
+                  setNewExpenseCategory('');
                 }}
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
               >
@@ -198,15 +225,79 @@ function CategorySettings() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {categories.map((category) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {expenseCategories.map((category) => (
             <div
               key={category}
-              className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-3"
+              className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg p-3"
             >
               <span className="font-medium text-gray-900">{category}</span>
               <button
-                onClick={() => handleDeleteCategory(category)}
+                onClick={() => handleDeleteExpenseCategory(category)}
+                className="text-red-600 hover:text-red-900"
+                title="Delete category"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Income Categories */}
+      <div>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Income Categories</h2>
+        <p className="text-gray-600 mb-4">
+          Categories for tracking income and earnings
+        </p>
+
+        <div className="mb-4">
+          {!showAddIncomeForm ? (
+            <button
+              onClick={() => setShowAddIncomeForm(true)}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              Add Income Category
+            </button>
+          ) : (
+            <form onSubmit={handleAddIncomeCategory} className="flex gap-2">
+              <input
+                type="text"
+                value={newIncomeCategory}
+                onChange={(e) => setNewIncomeCategory(e.target.value)}
+                placeholder="New income category..."
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                autoFocus
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                Add
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddIncomeForm(false);
+                  setNewIncomeCategory('');
+                }}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </form>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {incomeCategories.map((category) => (
+            <div
+              key={category}
+              className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-3"
+            >
+              <span className="font-medium text-gray-900">{category}</span>
+              <button
+                onClick={() => handleDeleteIncomeCategory(category)}
                 className="text-red-600 hover:text-red-900"
                 title="Delete category"
               >
