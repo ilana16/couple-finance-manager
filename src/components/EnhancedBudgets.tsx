@@ -29,6 +29,116 @@ interface Budget {
 }
 
 // Edit Budget Modal Component
+// New Budget Modal Component
+function NewBudgetModal({ onClose }: { onClose: () => void }) {
+  const { user } = useAuth();
+  const [formData, setFormData] = useState({
+    category: '',
+    monthlyAmount: 0,
+    spent: 0,
+    isJoint: true,
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+
+    const weeklyAmount = formData.monthlyAmount / 4.33;
+    const yearlyAmount = formData.monthlyAmount * 12;
+
+    budgetStorage.create({
+      userId: user.id,
+      category: formData.category,
+      monthlyAmount: formData.monthlyAmount,
+      weeklyAmount,
+      yearlyAmount,
+      spent: formData.spent,
+      isJoint: formData.isJoint,
+    });
+
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg max-w-md w-full p-6">
+        <h2 className="text-2xl font-bold mb-4">New Budget</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Category
+            </label>
+            <input
+              type="text"
+              value={formData.category}
+              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              placeholder="e.g., Food, Transportation, Housing"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Projected Monthly Amount (₪)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={formData.monthlyAmount}
+              onChange={(e) => setFormData({ ...formData, monthlyAmount: parseFloat(e.target.value) || 0 })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Actual Spent (₪)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={formData.spent}
+              onChange={(e) => setFormData({ ...formData, spent: parseFloat(e.target.value) || 0 })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+            />
+          </div>
+          
+          <div>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={formData.isJoint}
+                onChange={(e) => setFormData({ ...formData, isJoint: e.target.checked })}
+                className="rounded"
+              />
+              <span className="text-sm text-gray-700">Joint Budget</span>
+            </label>
+          </div>
+
+          <div className="flex gap-2 pt-4">
+            <button
+              type="submit"
+              className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+            >
+              Create Budget
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Edit Budget Modal Component
 function EditBudgetModal({ budget, onClose }: { budget: Budget; onClose: () => void }) {
   const { user } = useAuth();
   const [formData, setFormData] = useState({
@@ -492,6 +602,15 @@ export default function EnhancedBudgets() {
       )}
 
       {/* Modals */}
+      {showNewBudget && (
+        <NewBudgetModal
+          onClose={() => {
+            setShowNewBudget(false);
+            loadBudgets();
+          }}
+        />
+      )}
+      
       {editingBudget && (
         <EditBudgetModal
           budget={editingBudget}
