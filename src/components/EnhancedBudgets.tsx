@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Edit2, Trash2 } from 'lucide-react';
+import { useAuth } from '../lib/auth';
+import { budgetStorage } from '../lib/storage';
 import { BudgetPeriodType } from '../lib/enhanced-schema';
 import {
   convertBudgetAmount,
@@ -19,7 +21,6 @@ interface Budget {
   actualWeekly: number;
   projectedYearly: number;
   actualYearly: number;
-  // Legacy fields for compatibility
   monthlyAmount: number;
   weeklyAmount: number;
   yearlyAmount: number;
@@ -27,117 +28,204 @@ interface Budget {
   startingBalance?: number;
 }
 
+// Edit Budget Modal Component
+function EditBudgetModal({ budget, onClose }: { budget: Budget; onClose: () => void }) {
+  const { user } = useAuth();
+  const [formData, setFormData] = useState({
+    category: budget.category,
+    monthlyAmount: budget.projectedMonthly,
+    spent: budget.actualMonthly,
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+
+    const weeklyAmount = formData.monthlyAmount / 4.33;
+    const yearlyAmount = formData.monthlyAmount * 12;
+
+    budgetStorage.update(budget.id, {
+      category: formData.category,
+      monthlyAmount: formData.monthlyAmount,
+      weeklyAmount,
+      yearlyAmount,
+      spent: formData.spent,
+    });
+
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg max-w-md w-full p-6">
+        <h2 className="text-2xl font-bold mb-4">Edit Budget</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Category
+            </label>
+            <input
+              type="text"
+              value={formData.category}
+              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Projected Monthly Amount (₪)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={formData.monthlyAmount}
+              onChange={(e) => setFormData({ ...formData, monthlyAmount: parseFloat(e.target.value) || 0 })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Actual Spent (₪)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={formData.spent}
+              onChange={(e) => setFormData({ ...formData, spent: parseFloat(e.target.value) || 0 })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              required
+            />
+          </div>
+
+          <div className="flex gap-2 pt-4">
+            <button
+              type="submit"
+              className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+            >
+              Save Changes
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function EnhancedBudgets() {
+  const { user, viewMode } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState<BudgetPeriodType>('monthly');
   const [showTemplates, setShowTemplates] = useState(false);
   const [showExcelImport, setShowExcelImport] = useState(false);
   const [showNewBudget, setShowNewBudget] = useState(false);
-  
-  // Mock data - would come from API
-  const budgets: Budget[] = [
-    { 
-      id: '1', 
-      name: 'Food Budget', 
-      category: 'Food', 
-      projectedMonthly: 1200, 
-      actualMonthly: 850,
-      projectedWeekly: 300, 
-      actualWeekly: 212.5,
-      projectedYearly: 14400, 
-      actualYearly: 10200,
-      monthlyAmount: 1200, 
-      weeklyAmount: 300, 
-      yearlyAmount: 14400, 
-      spent: 850 
-    },
-    { 
-      id: '2', 
-      name: 'Health Budget', 
-      category: 'Health/Medical', 
-      projectedMonthly: 1300, 
-      actualMonthly: 1100,
-      projectedWeekly: 325, 
-      actualWeekly: 275,
-      projectedYearly: 15600, 
-      actualYearly: 13200,
-      monthlyAmount: 1300, 
-      weeklyAmount: 325, 
-      yearlyAmount: 15600, 
-      spent: 1100 
-    },
-    { 
-      id: '3', 
-      name: 'Transport Budget', 
-      category: 'Transportation', 
-      projectedMonthly: 465, 
-      actualMonthly: 420,
-      projectedWeekly: 116.25, 
-      actualWeekly: 105,
-      projectedYearly: 5580, 
-      actualYearly: 5040,
-      monthlyAmount: 465, 
-      weeklyAmount: 116.25, 
-      yearlyAmount: 5580, 
-      spent: 420 
-    },
-  ];
-  
+  const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
+
+  useEffect(() => {
+    loadBudgets();
+  }, [user, viewMode]);
+
+  const loadBudgets = () => {
+    if (!user) return;
+    const includeJoint = viewMode === 'joint';
+    const storageBudgets = budgetStorage.getByUser(user.id, includeJoint);
+    
+    const convertedBudgets: Budget[] = storageBudgets.map(b => ({
+      id: b.id,
+      name: b.category,
+      category: b.category,
+      projectedMonthly: b.monthlyAmount,
+      actualMonthly: b.spent,
+      projectedWeekly: b.weeklyAmount,
+      actualWeekly: convertBudgetAmount(b.spent, 'monthly', 'weekly'),
+      projectedYearly: b.yearlyAmount,
+      actualYearly: convertBudgetAmount(b.spent, 'monthly', 'yearly'),
+      monthlyAmount: b.monthlyAmount,
+      weeklyAmount: b.weeklyAmount,
+      yearlyAmount: b.yearlyAmount,
+      spent: b.spent,
+    }));
+    
+    setBudgets(convertedBudgets);
+  };
+
+  const handleDelete = (id: string, name: string) => {
+    if (confirm(`Are you sure you want to delete "${name}"?`)) {
+      budgetStorage.delete(id);
+      loadBudgets();
+    }
+  };
+
+  const handleEdit = (budget: Budget) => {
+    setEditingBudget(budget);
+  };
+
   const totalIncome = selectedPeriod === 'weekly' ? 1028.75 : selectedPeriod === 'monthly' ? 4115 : 49380;
   const startingBalance = 0;
   
   const totalBudgeted = budgets.reduce((sum, b) => {
     switch (selectedPeriod) {
       case 'weekly': return sum + b.weeklyAmount;
-      case 'monthly': return sum + b.monthlyAmount;
       case 'yearly': return sum + b.yearlyAmount;
+      default: return sum + b.monthlyAmount;
     }
   }, 0);
   
   const totalSpent = budgets.reduce((sum, b) => {
-    const periodSpent = convertBudgetAmount(b.spent, 'monthly', selectedPeriod);
-    return sum + periodSpent;
+    return sum + convertBudgetAmount(b.spent, 'monthly', selectedPeriod);
   }, 0);
   
-  const { whatsLeft, isDeficit, percentageUsed } = calculateWhatsLeft(
-    totalIncome,
-    totalSpent,
-    startingBalance
-  );
-  
+  const { whatsLeft, isDeficit, percentageUsed } = calculateWhatsLeft(totalIncome, totalSpent, startingBalance);
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Budgets</h1>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Budgets</h1>
+          <p className="text-gray-600 mt-1">
+            {viewMode === 'joint' ? 'All budgets' : 'Your budgets'}
+          </p>
+        </div>
         <div className="flex gap-2">
           <button
             onClick={() => setShowTemplates(true)}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600"
           >
             Use Template
           </button>
-          <button 
+          <button
             onClick={() => setShowExcelImport(true)}
-            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+            className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
           >
             Import from Excel
           </button>
-          <button 
+          <button
             onClick={() => setShowNewBudget(true)}
-            className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600"
+            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
           >
-            New Budget
+            + New Budget
           </button>
         </div>
       </div>
-      
-      {/* Period Selector */}
+
+      {/* Period Toggle */}
       <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <div className="flex items-center justify-between">
+        <div className="flex justify-between items-center">
           <div className="flex gap-2">
             <button
               onClick={() => setSelectedPeriod('weekly')}
-              className={`px-4 py-2 rounded ${
+              className={`px-4 py-2 rounded-md ${
                 selectedPeriod === 'weekly'
                   ? 'bg-blue-500 text-white'
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -147,7 +235,7 @@ export default function EnhancedBudgets() {
             </button>
             <button
               onClick={() => setSelectedPeriod('monthly')}
-              className={`px-4 py-2 rounded ${
+              className={`px-4 py-2 rounded-md ${
                 selectedPeriod === 'monthly'
                   ? 'bg-blue-500 text-white'
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -157,7 +245,7 @@ export default function EnhancedBudgets() {
             </button>
             <button
               onClick={() => setSelectedPeriod('yearly')}
-              className={`px-4 py-2 rounded ${
+              className={`px-4 py-2 rounded-md ${
                 selectedPeriod === 'yearly'
                   ? 'bg-blue-500 text-white'
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -209,487 +297,210 @@ export default function EnhancedBudgets() {
           <h2 className="text-xl font-semibold">Budget Categories</h2>
         </div>
         
-        <div className="divide-y">
-          {budgets.map(budget => {
-            // Get projected and actual based on period
-            const projected = selectedPeriod === 'weekly' ? budget.projectedWeekly :
-                             selectedPeriod === 'monthly' ? budget.projectedMonthly :
-                             budget.projectedYearly;
-            
-            const actual = selectedPeriod === 'weekly' ? budget.actualWeekly :
-                          selectedPeriod === 'monthly' ? budget.actualMonthly :
-                          budget.actualYearly;
-            
-            const difference = projected - actual;
-            const percentOfProjected = (actual / projected) * 100;
-            const isUnderBudget = actual <= projected;
-            const { percentage, status, color } = calculateBudgetProgress(actual, projected);
-            
-            return (
-              <div key={budget.id} className="p-4 hover:bg-gray-50">
-                <div className="flex justify-between items-start mb-2">
-                  <div className="flex-1">
-                    <h3 className="font-semibold">{budget.category}</h3>
-                    <p className="text-sm text-gray-600">{budget.name}</p>
-                  </div>
-                  <div className="text-right flex-1">
-                    <div className="grid grid-cols-2 gap-4 text-sm mb-2">
-                      <div>
-                        <div className="text-xs text-gray-500">Projected</div>
-                        <div className="font-semibold text-blue-600">₪{projected.toFixed(2)}</div>
+        {budgets.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            <p>No budgets yet. Click "New Budget" to create one!</p>
+          </div>
+        ) : (
+          <div className="divide-y">
+            {budgets.map(budget => {
+              const projected = selectedPeriod === 'weekly' ? budget.projectedWeekly :
+                               selectedPeriod === 'monthly' ? budget.projectedMonthly :
+                               budget.projectedYearly;
+              
+              const actual = selectedPeriod === 'weekly' ? budget.actualWeekly :
+                            selectedPeriod === 'monthly' ? budget.actualMonthly :
+                            budget.actualYearly;
+              
+              const difference = projected - actual;
+              const percentOfProjected = (actual / projected) * 100;
+              const isUnderBudget = actual <= projected;
+              const { percentage, status, color } = calculateBudgetProgress(actual, projected);
+              
+              return (
+                <div key={budget.id} className="p-4 hover:bg-gray-50">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex-1">
+                      <h3 className="font-semibold">{budget.category}</h3>
+                      <p className="text-sm text-gray-600">{budget.name}</p>
+                    </div>
+                    <div className="text-right flex-1">
+                      <div className="grid grid-cols-2 gap-4 text-sm mb-2">
+                        <div>
+                          <div className="text-xs text-gray-500">Projected</div>
+                          <div className="font-semibold text-blue-600">₪{projected.toFixed(2)}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-500">Actual</div>
+                          <div className="font-semibold text-gray-900">₪{actual.toFixed(2)}</div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-xs text-gray-500">Actual</div>
-                        <div className="font-semibold text-gray-900">₪{actual.toFixed(2)}</div>
+                      <div className="text-sm font-medium" style={{ color: isUnderBudget ? '#10b981' : '#ef4444' }}>
+                        {isUnderBudget ? '✓' : '⚠'} {isUnderBudget ? 'Under' : 'Over'} by ₪{Math.abs(difference).toFixed(2)}
+                        <span className="text-xs ml-1">({percentOfProjected.toFixed(1)}%)</span>
                       </div>
                     </div>
-                    <div className="text-sm font-medium" style={{ color: isUnderBudget ? '#10b981' : '#ef4444' }}>
-                      {isUnderBudget ? '✓' : '⚠'} {isUnderBudget ? 'Under' : 'Over'} by ₪{Math.abs(difference).toFixed(2)}
-                      <span className="text-xs ml-1">({percentOfProjected.toFixed(1)}%)</span>
+                    <div className="flex gap-2 ml-4">
+                      <button
+                        onClick={() => handleEdit(budget)}
+                        className="text-blue-600 hover:text-blue-900 p-1"
+                        title="Edit budget"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(budget.id, budget.name)}
+                        className="text-red-600 hover:text-red-900 p-1"
+                        title="Delete budget"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex gap-2 ml-4">
-                    <button
-                      onClick={() => alert(`Edit budget: ${budget.name}`)}
-                      className="text-blue-600 hover:text-blue-900 p-1"
-                      title="Edit budget"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm(`Are you sure you want to delete "${budget.name}"?`)) {
-                          alert(`Budget "${budget.name}" deleted!`);
-                        }
+                  
+                  {/* Progress Bar */}
+                  <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+                    <div
+                      className="h-2.5 rounded-full transition-all"
+                      style={{
+                        width: `${Math.min(percentage, 100)}%`,
+                        backgroundColor: color,
                       }}
-                      className="text-red-600 hover:text-red-900 p-1"
-                      title="Delete budget"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    />
                   </div>
-                </div>
-                
-                {/* Progress Bar */}
-                <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
-                  <div
-                    className="h-2.5 rounded-full transition-all"
-                    style={{
-                      width: `${Math.min(percentage, 100)}%`,
-                      backgroundColor: color,
-                    }}
-                  />
-                </div>
-                
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600">{percentage.toFixed(1)}% used</span>
-                  <span className="font-medium" style={{ color }}>
-                    {status === 'on-track' && '✓ On Track'}
-                    {status === 'warning' && '⚠ Warning'}
-                    {status === 'danger' && '⚠ Danger'}
-                    {status === 'over-budget' && '✗ Over Budget'}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      
-      {/* Projected vs Actual Comparison Chart */}
-      <div className="mt-6 bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold mb-4">Projected vs Actual Comparison</h2>
-        
-        <div className="space-y-4">
-          {budgets.map(budget => {
-            const projected = selectedPeriod === 'weekly' ? budget.projectedWeekly :
-                             selectedPeriod === 'monthly' ? budget.projectedMonthly :
-                             budget.projectedYearly;
-            
-            const actual = selectedPeriod === 'weekly' ? budget.actualWeekly :
-                          selectedPeriod === 'monthly' ? budget.actualMonthly :
-                          budget.actualYearly;
-            
-            const maxAmount = Math.max(projected, actual);
-            const projectedWidth = (projected / maxAmount) * 100;
-            const actualWidth = (actual / maxAmount) * 100;
-            const isUnderBudget = actual <= projected;
-            
-            return (
-              <div key={budget.id} className="border-b border-gray-200 pb-4 last:border-0">
-                <div className="flex justify-between items-center mb-2">
-                  <h3 className="font-semibold text-gray-900">{budget.category}</h3>
-                  <div className="text-sm">
-                    <span className={`font-medium ${isUnderBudget ? 'text-green-600' : 'text-red-600'}`}>
-                      {isUnderBudget ? 'Under' : 'Over'} Budget
+                  
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-600">{percentage.toFixed(1)}% used</span>
+                    <span className="font-medium" style={{ color }}>
+                      {status === 'on-track' && '✓ On Track'}
+                      {status === 'warning' && '⚠ Warning'}
+                      {status === 'danger' && '⚠ Danger'}
+                      {status === 'over-budget' && '✗ Over Budget'}
                     </span>
                   </div>
                 </div>
-                
-                {/* Projected Bar */}
-                <div className="mb-2">
-                  <div className="flex justify-between items-center text-xs text-gray-600 mb-1">
-                    <span>Projected</span>
-                    <span className="font-semibold">₪{projected.toFixed(2)}</span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-6">
-                    <div
-                      className="bg-blue-500 h-6 rounded-full flex items-center justify-end pr-2 text-xs text-white font-medium"
-                      style={{ width: `${projectedWidth}%` }}
-                    >
-                      {projectedWidth > 20 && `${projectedWidth.toFixed(0)}%`}
+              );
+            })}
+          </div>
+        )}
+      </div>
+      
+      {/* Projected vs Actual Comparison Chart */}
+      {budgets.length > 0 && (
+        <div className="mt-6 bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold mb-4">Projected vs Actual Comparison</h2>
+          
+          <div className="space-y-4">
+            {budgets.map(budget => {
+              const projected = selectedPeriod === 'weekly' ? budget.projectedWeekly :
+                               selectedPeriod === 'monthly' ? budget.projectedMonthly :
+                               budget.projectedYearly;
+              
+              const actual = selectedPeriod === 'weekly' ? budget.actualWeekly :
+                            selectedPeriod === 'monthly' ? budget.actualMonthly :
+                            budget.actualYearly;
+              
+              const maxAmount = Math.max(projected, actual);
+              const projectedWidth = (projected / maxAmount) * 100;
+              const actualWidth = (actual / maxAmount) * 100;
+              const isUnderBudget = actual <= projected;
+              
+              return (
+                <div key={budget.id} className="border-b border-gray-200 pb-4 last:border-0">
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-semibold text-gray-900">{budget.category}</h3>
+                    <div className="text-sm">
+                      <span className={`font-medium ${isUnderBudget ? 'text-green-600' : 'text-red-600'}`}>
+                        {isUnderBudget ? 'Under' : 'Over'} Budget
+                      </span>
                     </div>
                   </div>
-                </div>
-                
-                {/* Actual Bar */}
-                <div>
-                  <div className="flex justify-between items-center text-xs text-gray-600 mb-1">
-                    <span>Actual</span>
-                    <span className="font-semibold">₪{actual.toFixed(2)}</span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-6">
-                    <div
-                      className={`h-6 rounded-full flex items-center justify-end pr-2 text-xs text-white font-medium ${
-                        isUnderBudget ? 'bg-green-500' : 'bg-red-500'
-                      }`}
-                      style={{ width: `${actualWidth}%` }}
-                    >
-                      {actualWidth > 20 && `${actualWidth.toFixed(0)}%`}
+                  
+                  {/* Projected Bar */}
+                  <div className="mb-2">
+                    <div className="flex justify-between items-center text-xs text-gray-600 mb-1">
+                      <span>Projected</span>
+                      <span className="font-semibold">₪{projected.toFixed(2)}</span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-6">
+                      <div
+                        className="bg-blue-500 h-6 rounded-full flex items-center justify-end pr-2 text-xs text-white font-medium"
+                        style={{ width: `${projectedWidth}%` }}
+                      >
+                        {projectedWidth > 20 && `${projectedWidth.toFixed(0)}%`}
+                      </div>
                     </div>
                   </div>
+                  
+                  {/* Actual Bar */}
+                  <div>
+                    <div className="flex justify-between items-center text-xs text-gray-600 mb-1">
+                      <span>Actual</span>
+                      <span className="font-semibold">₪{actual.toFixed(2)}</span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-6">
+                      <div
+                        className={`h-6 rounded-full flex items-center justify-end pr-2 text-xs text-white font-medium ${
+                          isUnderBudget ? 'bg-green-500' : 'bg-red-500'
+                        }`}
+                        style={{ width: `${actualWidth}%` }}
+                      >
+                        {actualWidth > 20 && `${actualWidth.toFixed(0)}%`}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Difference */}
+                  <div className="mt-2 text-sm text-right">
+                    <span className={isUnderBudget ? 'text-green-600' : 'text-red-600'}>
+                      {isUnderBudget ? 'Saved' : 'Overspent'}: ₪{Math.abs(projected - actual).toFixed(2)}
+                    </span>
+                  </div>
                 </div>
-                
-                {/* Difference */}
-                <div className="mt-2 text-sm text-right">
-                  <span className={isUnderBudget ? 'text-green-600' : 'text-red-600'}>
-                    {isUnderBudget ? 'Saved' : 'Overspent'}: ₪{Math.abs(projected - actual).toFixed(2)}
-                  </span>
+              );
+            })}
+          </div>
+          
+          {/* Summary */}
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div>
+                <div className="text-sm text-gray-600">Total Projected</div>
+                <div className="text-xl font-bold text-blue-600">
+                  ₪{budgets.reduce((sum, b) => sum + (selectedPeriod === 'weekly' ? b.projectedWeekly : selectedPeriod === 'monthly' ? b.projectedMonthly : b.projectedYearly), 0).toFixed(2)}
                 </div>
               </div>
-            );
-          })}
-        </div>
-        
-        {/* Summary */}
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div>
-              <div className="text-sm text-gray-600">Total Projected</div>
-              <div className="text-xl font-bold text-blue-600">
-                ₪{budgets.reduce((sum, b) => sum + (selectedPeriod === 'weekly' ? b.projectedWeekly : selectedPeriod === 'monthly' ? b.projectedMonthly : b.projectedYearly), 0).toFixed(2)}
+              <div>
+                <div className="text-sm text-gray-600">Total Actual</div>
+                <div className="text-xl font-bold text-gray-900">
+                  ₪{budgets.reduce((sum, b) => sum + (selectedPeriod === 'weekly' ? b.actualWeekly : selectedPeriod === 'monthly' ? b.actualMonthly : b.actualYearly), 0).toFixed(2)}
+                </div>
               </div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-600">Total Actual</div>
-              <div className="text-xl font-bold text-gray-900">
-                ₪{budgets.reduce((sum, b) => sum + (selectedPeriod === 'weekly' ? b.actualWeekly : selectedPeriod === 'monthly' ? b.actualMonthly : b.actualYearly), 0).toFixed(2)}
-              </div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-600">Difference</div>
-              <div className={`text-xl font-bold ${
-                budgets.reduce((sum, b) => sum + (selectedPeriod === 'weekly' ? b.projectedWeekly - b.actualWeekly : selectedPeriod === 'monthly' ? b.projectedMonthly - b.actualMonthly : b.projectedYearly - b.actualYearly), 0) >= 0
-                  ? 'text-green-600'
-                  : 'text-red-600'
-              }`}>
-                ₪{Math.abs(budgets.reduce((sum, b) => sum + (selectedPeriod === 'weekly' ? b.projectedWeekly - b.actualWeekly : selectedPeriod === 'monthly' ? b.projectedMonthly - b.actualMonthly : b.projectedYearly - b.actualYearly), 0)).toFixed(2)}
+              <div>
+                <div className="text-sm text-gray-600">Difference</div>
+                <div className={`text-xl font-bold ${
+                  budgets.reduce((sum, b) => sum + (selectedPeriod === 'weekly' ? b.projectedWeekly - b.actualWeekly : selectedPeriod === 'monthly' ? b.projectedMonthly - b.actualMonthly : b.projectedYearly - b.actualYearly), 0) >= 0
+                    ? 'text-green-600'
+                    : 'text-red-600'
+                }`}>
+                  ₪{Math.abs(budgets.reduce((sum, b) => sum + (selectedPeriod === 'weekly' ? b.projectedWeekly - b.actualWeekly : selectedPeriod === 'monthly' ? b.projectedMonthly - b.actualMonthly : b.projectedYearly - b.actualYearly), 0)).toFixed(2)}
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Modals */}
-      {showTemplates && <TemplateModal onClose={() => setShowTemplates(false)} />}
-      {showExcelImport && <ExcelImportModal onClose={() => setShowExcelImport(false)} />}
-      {showNewBudget && <NewBudgetModal onClose={() => setShowNewBudget(false)} />}
-    </div>
-  );
-}
-
-// Template Modal Component
-function TemplateModal({ onClose }: { onClose: () => void }) {
-  const templates = [
-    {
-      name: '50/30/20 Rule',
-      description: '50% Needs, 30% Wants, 20% Savings',
-      categories: [
-        { name: 'Housing & Utilities', percentage: 30, type: 'needs' },
-        { name: 'Food & Groceries', percentage: 15, type: 'needs' },
-        { name: 'Transportation', percentage: 5, type: 'needs' },
-        { name: 'Entertainment', percentage: 15, type: 'wants' },
-        { name: 'Shopping', percentage: 10, type: 'wants' },
-        { name: 'Dining Out', percentage: 5, type: 'wants' },
-        { name: 'Savings', percentage: 15, type: 'savings' },
-        { name: 'Investments', percentage: 5, type: 'savings' },
-      ],
-    },
-    {
-      name: 'Zero-Based Budget',
-      description: 'Every shekel has a purpose',
-      categories: [
-        { name: 'Housing', percentage: 25 },
-        { name: 'Food', percentage: 15 },
-        { name: 'Transportation', percentage: 10 },
-        { name: 'Utilities', percentage: 8 },
-        { name: 'Insurance', percentage: 7 },
-        { name: 'Debt Payments', percentage: 10 },
-        { name: 'Entertainment', percentage: 8 },
-        { name: 'Savings', percentage: 10 },
-        { name: 'Miscellaneous', percentage: 7 },
-      ],
-    },
-    {
-      name: 'Your Spreadsheet',
-      description: 'Based on your uploaded budget',
-      categories: [
-        { name: 'Food', amount: 1200 },
-        { name: 'Health & Medical', amount: 1300 },
-        { name: 'Transportation', amount: 465 },
-        { name: 'Housing', amount: 800 },
-        { name: 'Utilities', amount: 300 },
-        { name: 'Entertainment', amount: 200 },
-        { name: 'Shopping', amount: 150 },
-        { name: 'Savings', amount: 500 },
-      ],
-    },
-  ];
-
-  const handleSelectTemplate = (template: any) => {
-    alert(`Template "${template.name}" selected! This would create budgets based on the template.`);
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full p-6 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-2xl font-bold mb-4">Choose a Budget Template</h2>
-        <p className="text-gray-600 mb-6">Select a template to quickly set up your budget</p>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          {templates.map((template) => (
-            <div
-              key={template.name}
-              className="border border-gray-200 rounded-lg p-4 hover:border-blue-500 hover:shadow-lg transition-all cursor-pointer"
-              onClick={() => handleSelectTemplate(template)}
-            >
-              <h3 className="font-bold text-lg mb-2">{template.name}</h3>
-              <p className="text-sm text-gray-600 mb-4">{template.description}</p>
-              <div className="space-y-1">
-                {template.categories.slice(0, 5).map((cat) => (
-                  <div key={cat.name} className="text-xs text-gray-700">
-                    • {cat.name}
-                    {(cat as any).percentage && ` (${(cat as any).percentage}%)`}
-                    {(cat as any).amount && ` (₪${(cat as any).amount})`}
-                  </div>
-                ))}
-                {template.categories.length > 5 && (
-                  <div className="text-xs text-gray-500">+ {template.categories.length - 5} more...</div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <button
-          onClick={onClose}
-          className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// Excel Import Modal Component
-function ExcelImportModal({ onClose }: { onClose: () => void }) {
-  const [file, setFile] = useState<File | null>(null);
-  const [importing, setImporting] = useState(false);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-    }
-  };
-
-  const handleImport = () => {
-    if (!file) return;
-    setImporting(true);
-    
-    // Simulate import process
-    setTimeout(() => {
-      alert(`Successfully imported budget from "${file.name}"!\n\nThis would parse the Excel file and create budgets based on the data.`);
-      setImporting(false);
-      onClose();
-    }, 1500);
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-        <h2 className="text-2xl font-bold mb-4">Import from Excel</h2>
-        <p className="text-gray-600 mb-6">
-          Upload an Excel file (.xlsx, .xls) with your budget data
-        </p>
-
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select Excel File
-          </label>
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleFileChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          />
-          {file && (
-            <p className="text-sm text-gray-600 mt-2">
-              Selected: {file.name}
-            </p>
-          )}
-        </div>
-
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-          <h3 className="font-semibold text-blue-900 mb-2">Expected Format:</h3>
-          <div className="text-sm text-blue-700 space-y-1">
-            <p>• Column A: Category Name</p>
-            <p>• Column B: Monthly Amount</p>
-            <p>• First row should be headers</p>
-            <p>• Example: "Food, 1200"</p>
-          </div>
-        </div>
-
-        <div className="flex gap-3">
-          <button
-            onClick={onClose}
-            className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-            disabled={importing}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleImport}
-            disabled={!file || importing}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {importing ? 'Importing...' : 'Import'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// New Budget Modal Component
-function NewBudgetModal({ onClose }: { onClose: () => void }) {
-  const [formData, setFormData] = useState({
-    name: '',
-    category: 'Food',
-    monthlyAmount: '',
-  });
-
-  const categories = [
-    'Food',
-    'Transportation',
-    'Health & Medical',
-    'Housing',
-    'Utilities',
-    'Entertainment',
-    'Shopping',
-    'Savings',
-    'Income',
-    'Other',
-  ];
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    alert(`Budget created!\n\nName: ${formData.name}\nCategory: ${formData.category}\nMonthly Amount: ₪${formData.monthlyAmount}\n\nThis would save the budget to the database.`);
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-        <h2 className="text-2xl font-bold mb-4">Create New Budget</h2>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Budget Name
-            </label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g., Monthly Food Budget"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Category
-            </label>
-            <select
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              required
-            >
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Monthly Amount (₪)
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={formData.monthlyAmount}
-              onChange={(e) => setFormData({ ...formData, monthlyAmount: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="0.00"
-              required
-            />
-          </div>
-
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-600">
-            <p>Weekly and yearly amounts will be calculated automatically:</p>
-            <p className="mt-1">
-              • Weekly: ₪{formData.monthlyAmount ? (parseFloat(formData.monthlyAmount) / 4.33).toFixed(2) : '0.00'}
-            </p>
-            <p>
-              • Yearly: ₪{formData.monthlyAmount ? (parseFloat(formData.monthlyAmount) * 12).toFixed(2) : '0.00'}
-            </p>
-          </div>
-
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Create Budget
-            </button>
-          </div>
-        </form>
-      </div>
+      {editingBudget && (
+        <EditBudgetModal
+          budget={editingBudget}
+          onClose={() => {
+            setEditingBudget(null);
+            loadBudgets();
+          }}
+        />
+      )}
     </div>
   );
 }

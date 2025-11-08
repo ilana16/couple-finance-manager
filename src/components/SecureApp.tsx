@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, ProtectedRoute, useAuth } from '../lib/auth';
+import { transactionStorage, reminderStorage } from '../lib/storage';
 import SidebarLayout from '../layouts/SidebarLayout';
 import EnhancedBudgets from './EnhancedBudgets';
 import { FinancialHealthPage } from './FinancialHealthWidget';
@@ -69,6 +70,84 @@ function MainApp() {
 // Dashboard Page
 function DashboardPage() {
   const { user, viewMode } = useAuth();
+  const [stats, setStats] = useState({
+    totalBalance: 0,
+    monthlyIncome: 0,
+    monthlyExpenses: 0,
+    savingsRate: 0,
+  });
+  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+  const [upcomingReminders, setUpcomingReminders] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!user) return;
+    loadDashboardData();
+  }, [user, viewMode]);
+
+  const loadDashboardData = () => {
+    if (!user) return;
+    const includeJoint = viewMode === 'joint';
+
+    // Load transactions
+    const transactions = transactionStorage.getByUser(user.id, includeJoint);
+    const sortedTransactions = transactions
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 5);
+    setRecentTransactions(sortedTransactions);
+
+    // Calculate stats
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const monthlyTransactions = transactions.filter(t => {
+      const tDate = new Date(t.date);
+      return tDate.getMonth() === currentMonth && tDate.getFullYear() === currentYear;
+    });
+
+    const income = monthlyTransactions
+      .filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const expenses = monthlyTransactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const balance = transactions.reduce((sum, t) => {
+      return sum + (t.type === 'income' ? t.amount : -t.amount);
+    }, 0);
+
+    const savingsRate = income > 0 ? ((income - expenses) / income) * 100 : 0;
+
+    setStats({
+      totalBalance: balance,
+      monthlyIncome: income,
+      monthlyExpenses: expenses,
+      savingsRate,
+    });
+
+    // Load upcoming reminders
+    const reminders = reminderStorage.getAll()
+      .filter(r => !r.isCompleted && new Date(r.dueDate) >= now)
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+      .slice(0, 3);
+    setUpcomingReminders(reminders);
+  };
+
+  const formatDate = (date: Date) => {
+    const now = new Date();
+    const diff = now.getTime() - new Date(date).getTime();
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return `${days} days ago`;
+    return new Date(date).toLocaleDateString();
+  };
+
+  const formatDueDate = (date: Date) => {
+    return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -83,45 +162,69 @@ function DashboardPage() {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Total Balance" value="₪12,450" change="+5.2%" positive />
-        <StatCard title="Monthly Income" value="₪4,115" change="+2.1%" positive />
-        <StatCard title="Monthly Expenses" value="₪3,890" change="-3.5%" positive />
-        <StatCard title="Savings Rate" value="5.5%" change="+1.2%" positive />
+        <StatCard 
+          title="Total Balance" 
+          value={`₪${stats.totalBalance.toFixed(2)}`} 
+          change={stats.totalBalance >= 0 ? 'Positive' : 'Negative'} 
+          positive={stats.totalBalance >= 0} 
+        />
+        <StatCard 
+          title="Monthly Income" 
+          value={`₪${stats.monthlyIncome.toFixed(2)}`} 
+          change="This Month" 
+          positive 
+        />
+        <StatCard 
+          title="Monthly Expenses" 
+          value={`₪${stats.monthlyExpenses.toFixed(2)}`} 
+          change="This Month" 
+          positive={stats.monthlyExpenses < stats.monthlyIncome} 
+        />
+        <StatCard 
+          title="Savings Rate" 
+          value={`${stats.savingsRate.toFixed(1)}%`} 
+          change={stats.savingsRate > 0 ? 'Saving' : 'Deficit'} 
+          positive={stats.savingsRate > 0} 
+        />
       </div>
 
       {/* Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold mb-4">Recent Transactions</h2>
-          <div className="space-y-3">
-            <TransactionItem
-              description="Grocery Shopping"
-              amount={-150}
-              category="Food"
-              date="Today"
-            />
-            <TransactionItem
-              description="Salary Deposit"
-              amount={4115}
-              category="Income"
-              date="Yesterday"
-            />
-            <TransactionItem
-              description="Electric Bill"
-              amount={-280}
-              category="Utilities"
-              date="2 days ago"
-            />
-          </div>
+          {recentTransactions.length === 0 ? (
+            <p className="text-gray-500 text-center py-4">No transactions yet</p>
+          ) : (
+            <div className="space-y-3">
+              {recentTransactions.map(t => (
+                <TransactionItem
+                  key={t.id}
+                  description={t.description}
+                  amount={t.type === 'income' ? t.amount : -t.amount}
+                  category={t.category}
+                  date={formatDate(t.date)}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4">Upcoming Bills</h2>
-          <div className="space-y-3">
-            <BillItem name="Rent" amount={2500} dueDate="Dec 1" />
-            <BillItem name="Internet" amount={120} dueDate="Dec 5" />
-            <BillItem name="Phone" amount={80} dueDate="Dec 10" />
-          </div>
+          <h2 className="text-lg font-semibold mb-4">Upcoming Reminders</h2>
+          {upcomingReminders.length === 0 ? (
+            <p className="text-gray-500 text-center py-4">No upcoming reminders</p>
+          ) : (
+            <div className="space-y-3">
+              {upcomingReminders.map(r => (
+                <BillItem 
+                  key={r.id}
+                  name={r.title} 
+                  amount={0} 
+                  dueDate={formatDueDate(r.dueDate)} 
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
