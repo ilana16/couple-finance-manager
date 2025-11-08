@@ -252,6 +252,7 @@ export default function EnhancedBudgets() {
   const [showNewBudget, setShowNewBudget] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
   const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [showImportFromPredictions, setShowImportFromPredictions] = useState(false);
 
   useEffect(() => {
     loadBudgets();
@@ -298,6 +299,57 @@ export default function EnhancedBudgets() {
 
   const handleEdit = (budget: Budget) => {
     setEditingBudget(budget);
+  };
+
+  const handleImportFromPredictions = () => {
+    if (!user) return;
+    const saved = localStorage.getItem(`predictions_${user.id}`);
+    if (!saved) {
+      alert('No predictions found. Please add predictions first.');
+      return;
+    }
+    
+    const predictions = JSON.parse(saved);
+    const expensePredictions = predictions.expenses || [];
+    
+    if (expensePredictions.length === 0) {
+      alert('No expense predictions found. Please add expense predictions first.');
+      return;
+    }
+    
+    let importedCount = 0;
+    expensePredictions.forEach((pred: any) => {
+      // Check if budget already exists for this category
+      const existingBudget = budgets.find(b => b.category === pred.category);
+      if (existingBudget) {
+        return; // Skip if budget already exists
+      }
+      
+      // Convert prediction amount to monthly
+      let monthlyAmount = pred.amount;
+      if (pred.frequency === 'weekly') monthlyAmount = pred.amount * 4.33;
+      if (pred.frequency === 'yearly') monthlyAmount = pred.amount / 12;
+      
+      const weeklyAmount = monthlyAmount / 4.33;
+      const yearlyAmount = monthlyAmount * 12;
+      
+      // Create new budget from prediction
+      budgetStorage.create({
+        category: pred.category,
+        monthlyAmount,
+        weeklyAmount,
+        yearlyAmount,
+        spent: 0,
+        isJoint: viewMode === 'joint',
+        userId: user.id,
+      });
+      
+      importedCount++;
+    });
+    
+    loadBudgets();
+    setShowImportFromPredictions(false);
+    alert(`Successfully imported ${importedCount} budget(s) from predictions!`);
   };
 
   // Calculate total income from Predictions page
@@ -350,7 +402,13 @@ export default function EnhancedBudgets() {
             {viewMode === 'joint' ? 'All budgets' : 'Your budgets'}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => setShowImportFromPredictions(true)}
+            className="px-4 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600"
+          >
+            Import from Predictions
+          </button>
           <button
             onClick={() => setShowTemplates(true)}
             className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600"
@@ -549,6 +607,38 @@ export default function EnhancedBudgets() {
             loadBudgets();
           }}
         />
+      )}
+      
+      {showImportFromPredictions && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h2 className="text-2xl font-bold mb-4">Import from Predictions</h2>
+            <div className="space-y-4">
+              <p className="text-gray-700">
+                This will create budgets for all expense categories in your Predictions page that don't already have budgets.
+              </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                <p className="text-sm text-blue-800">
+                  <strong>Note:</strong> Budget limits will be set to the predicted monthly expense amounts. Existing budgets will not be modified.
+                </p>
+              </div>
+              <div className="flex gap-2 pt-4">
+                <button
+                  onClick={handleImportFromPredictions}
+                  className="flex-1 px-4 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600"
+                >
+                  Import Budgets
+                </button>
+                <button
+                  onClick={() => setShowImportFromPredictions(false)}
+                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
