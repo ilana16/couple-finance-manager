@@ -162,7 +162,7 @@ export default function SidebarLayout({ children, currentPage, onNavigate }: Sid
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
         <div className="md:hidden fixed inset-0 z-40 bg-black bg-opacity-50" onClick={() => setIsMobileMenuOpen(false)}>
-          <aside className="w-64 h-full bg-white" onClick={(e) => e.stopPropagation()}>
+          <aside className="w-64 h-full bg-white flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Same content as desktop sidebar */}
             <div className="p-6 border-b border-gray-200">
               <h1 className="text-2xl font-bold text-gray-900">Couple Finance</h1>
@@ -197,7 +197,7 @@ export default function SidebarLayout({ children, currentPage, onNavigate }: Sid
               </div>
             </div>
 
-            <nav className="flex-1 overflow-y-auto p-4">
+            <nav className="flex-1 overflow-y-auto p-4" style={{ maxHeight: 'calc(100vh - 200px)' }}>
               <ul className="space-y-1">
                 {menuItems.map((item) => {
                   const Icon = item.icon;
