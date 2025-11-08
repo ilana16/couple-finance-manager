@@ -456,17 +456,7 @@ export function initializeDemoData(userId: string) {
     });
   }
   
-  if (budgetStorage.getAll().length === 0) {
-    budgetStorage.create({
-      userId,
-      category: 'Food',
-      monthlyAmount: 1200,
-      weeklyAmount: 300,
-      yearlyAmount: 14400,
-      spent: 850,
-      isJoint: true,
-    });
-  }
+  // Budget starts empty - users can add their own or use templates
 }
 
 // Accounts
