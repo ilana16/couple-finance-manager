@@ -1,49 +1,21 @@
-import { createServer, type Server } from "http";
-import { db } from "../drizzle/db";
-import { 
-  transactions, 
-  accounts, 
-  categories,
-  budgets,
-  savingsGoals,
-  debts,
-  investments,
-  sharedNotes,
-  reminders,
-  documents,
-  notificationPreferences,
-  aiInsights
-} from "../drizzle/schema";
-import { eq, and, desc, gte, lte, sql } from "drizzle-orm";
+// Routes placeholder - backend integration required
+// This file is a placeholder for backend route definitions
 
-export function registerRoutes(app: Express): Server {
-  // ============================================
-  // TRANSACTIONS
-  // ============================================
-  
-  // Get all transactions for the user
-  app.get("/api/transactions", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).send("Not authenticated");
-    }
+export interface RouteConfig {
+  path: string;
+  method: string;
+  handler: string;
+}
 
-    try {
-      const userTransactions = await db
-        .select()
-        .from(transactions)
-        .where(eq(transactions.userId, req.user.id))
-        .orderBy(desc(transactions.date));
+export const routes: RouteConfig[] = [
+  { path: '/api/transactions', method: 'GET', handler: 'getTransactions' },
+  { path: '/api/transactions', method: 'POST', handler: 'createTransaction' },
+  { path: '/api/budgets', method: 'GET', handler: 'getBudgets' },
+  { path: '/api/budgets', method: 'POST', handler: 'createBudget' },
+  { path: '/api/reimbursements', method: 'GET', handler: 'getReimbursements' },
+  { path: '/api/financial-health', method: 'GET', handler: 'getFinancialHealth' },
+];
 
-      res.json(userTransactions);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch transactions" });
-    }
-  });
-
-  // Create a new transaction
-  app.post("/api/transactions", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).send("Not authenticated");
-    }
-
-    try {
+export function getRouteByPath(path: string): RouteConfig | undefined {
+  return routes.find(route => route.path === path);
+}

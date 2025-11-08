@@ -7,22 +7,16 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.0",
-    "@tanstack/react-query": "^5.12.0",
-    "@trpc/client": "^10.45.0",
-    "@trpc/server": "^10.45.0",
-    "@trpc/react-query": "^10.45.0",
     "recharts": "^2.10.0",
     "lucide-react": "^0.294.0",
     "date-fns": "^2.30.0",
-    "zod": "^3.22.4",
-    "clsx": "^2.0.0",
-    "tailwind-merge": "^2.1.0"
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",
@@ -38,14 +32,5 @@
     "tailwindcss": "^3.3.6",
     "typescript": "^5.2.2",
     "vite": "^5.0.8"
-  },
-  "keywords": [
-    "finance",
-    "budgeting",
-    "couples",
-    "money-management",
-    "personal-finance"
-  ],
-  "author": "",
-  "license": "MIT"
+  }
 }
