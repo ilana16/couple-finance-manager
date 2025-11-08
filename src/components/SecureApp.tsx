@@ -4,6 +4,9 @@ import SidebarLayout from '../layouts/SidebarLayout';
 import EnhancedBudgets from './EnhancedBudgets';
 import { FinancialHealthPage } from './FinancialHealthWidget';
 import { ReimbursementManagementPage } from './ReimbursementWidget';
+import TransactionsPage from './TransactionsPage';
+import GoalsPage from './GoalsPage';
+import DebtsPage from './DebtsPage';
 import { initializeDemoData } from '../lib/storage';
 
 export default function SecureApp() {
@@ -166,18 +169,6 @@ function BillItem({ name, amount, dueDate }: any) {
 }
 
 // Placeholder pages
-function TransactionsPage() {
-  return <PlaceholderPage title="Transactions" description="Track all your income and expenses" />;
-}
-
-function GoalsPage() {
-  return <PlaceholderPage title="Savings Goals" description="Set and track your financial goals" />;
-}
-
-function DebtsPage() {
-  return <PlaceholderPage title="Debt Management" description="Track and pay off your debts" />;
-}
-
 function InvestmentsPage() {
   return <PlaceholderPage title="Investments" description="Monitor your investment portfolio" />;
 }
