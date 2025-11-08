@@ -41,6 +41,7 @@ export default function SidebarLayout({ children, currentPage, onNavigate }: Sid
     { id: 'reports', label: 'Reports', icon: FileText },
     { id: 'notes', label: 'Shared Notes', icon: FileText },
     { id: 'reminders', label: 'Reminders', icon: Bell },
+    { id: 'predictions', label: 'Predictions', icon: TrendingUp },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 

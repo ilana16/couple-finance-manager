@@ -15,6 +15,7 @@ import ReportsPage from './ReportsPage';
 import NotesPage from './NotesPage';
 import RemindersPage from './RemindersPage';
 import SettingsPage from './SettingsPage';
+import PredictionsPage from './PredictionsPage';
 
 
 export default function SecureApp() {
@@ -61,6 +62,8 @@ function MainApp() {
         return <RemindersPage />;
       case 'settings':
         return <SettingsPage />;
+      case 'predictions':
+        return <PredictionsPage />;
       default:
         return <DashboardPage />;
     }
@@ -84,6 +87,8 @@ function DashboardPage() {
     totalAccounts: 0,
     totalCredit: 0,
     availableCredit: 0,
+    predictedIncome: 0,
+    predictedExpenses: 0,
   });
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [upcomingReminders, setUpcomingReminders] = useState<any[]>([]);
@@ -137,6 +142,31 @@ function DashboardPage() {
 
     const savingsRate = income > 0 ? ((income - expenses) / income) * 100 : 0;
 
+    // Load predictions
+    const predictionsData = localStorage.getItem(`predictions_${user.id}`);
+    let predictedIncome = 0;
+    let predictedExpenses = 0;
+    
+    if (predictionsData) {
+      const predictions = JSON.parse(predictionsData);
+      const toMonthly = (amount: number, frequency: string) => {
+        if (frequency === 'weekly') return amount * 4.33;
+        if (frequency === 'monthly') return amount;
+        if (frequency === 'yearly') return amount / 12;
+        return amount;
+      };
+      
+      predictedIncome = predictions.income?.reduce(
+        (sum: number, item: any) => sum + toMonthly(item.amount, item.frequency),
+        0
+      ) || 0;
+      
+      predictedExpenses = predictions.expenses?.reduce(
+        (sum: number, item: any) => sum + toMonthly(item.amount, item.frequency),
+        0
+      ) || 0;
+    }
+
     setStats({
       totalBalance: totalAccountBalance,
       monthlyIncome: income,
@@ -145,6 +175,8 @@ function DashboardPage() {
       totalAccounts: accounts.length,
       totalCredit: totalCreditBalance,
       availableCredit: totalAvailableCredit,
+      predictedIncome,
+      predictedExpenses,
     });
 
     // Load upcoming reminders
@@ -208,6 +240,70 @@ function DashboardPage() {
           positive={stats.savingsRate > 0} 
         />
       </div>
+
+      {/* Predicted vs Actual Comparison */}
+      {(stats.predictedIncome > 0 || stats.predictedExpenses > 0) && (
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4">Predicted vs Actual</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-gray-700">Income</h3>
+                <span className={`text-sm font-medium ${
+                  stats.monthlyIncome >= stats.predictedIncome ? 'text-green-600' : 'text-orange-600'
+                }`}>
+                  {stats.monthlyIncome >= stats.predictedIncome ? '↑' : '↓'}
+                  {Math.abs(((stats.monthlyIncome - stats.predictedIncome) / stats.predictedIncome) * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Predicted:</span>
+                  <span className="font-medium">₪{stats.predictedIncome.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Actual:</span>
+                  <span className="font-medium">₪{stats.monthlyIncome.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-semibold">
+                  <span className="text-gray-700">Difference:</span>
+                  <span className={stats.monthlyIncome >= stats.predictedIncome ? 'text-green-600' : 'text-orange-600'}>
+                    {stats.monthlyIncome >= stats.predictedIncome ? '+' : ''}₪{(stats.monthlyIncome - stats.predictedIncome).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-gray-700">Expenses</h3>
+                <span className={`text-sm font-medium ${
+                  stats.monthlyExpenses <= stats.predictedExpenses ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {stats.monthlyExpenses <= stats.predictedExpenses ? '↓' : '↑'}
+                  {Math.abs(((stats.monthlyExpenses - stats.predictedExpenses) / stats.predictedExpenses) * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Predicted:</span>
+                  <span className="font-medium">₪{stats.predictedExpenses.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Actual:</span>
+                  <span className="font-medium">₪{stats.monthlyExpenses.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-semibold">
+                  <span className="text-gray-700">Difference:</span>
+                  <span className={stats.monthlyExpenses <= stats.predictedExpenses ? 'text-green-600' : 'text-red-600'}>
+                    {stats.monthlyExpenses <= stats.predictedExpenses ? '-' : '+'}₪{Math.abs(stats.monthlyExpenses - stats.predictedExpenses).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
