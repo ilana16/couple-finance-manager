@@ -25,21 +25,21 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Hardcoded users for demo (replace with backend in production)
 const USERS: Record<string, { password: string; user: User }> = {
-  'partner1@couple.fin': {
-    password: 'demo123', // Change this!
+  'Ilana': {
+    password: '2527',
     user: {
       id: 'user1',
-      name: 'Partner 1',
-      email: 'partner1@couple.fin',
+      name: 'Ilana',
+      email: 'ilana@couple.fin',
       role: 'partner1',
     },
   },
-  'partner2@couple.fin': {
-    password: 'demo123', // Change this!
+  'Binyomin': {
+    password: '1221',
     user: {
       id: 'user2',
-      name: 'Partner 2',
-      email: 'partner2@couple.fin',
+      name: 'Binyomin',
+      email: 'binyomin@couple.fin',
       role: 'partner2',
     },
   },
@@ -192,15 +192,15 @@ function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-              Email
+              Username
             </label>
             <input
               id="email"
-              type="email"
+              type="text"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="your@email.com"
+              placeholder="Enter your username"
               required
             />
           </div>
@@ -236,12 +236,12 @@ function LoginPage() {
         </form>
 
         <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-          <p className="text-xs text-gray-600 text-center mb-2">Demo Credentials:</p>
+          <p className="text-xs text-gray-600 text-center mb-2">Login Credentials:</p>
           <p className="text-xs text-gray-700 text-center">
-            <strong>Partner 1:</strong> partner1@couple.fin / demo123
+            <strong>Ilana:</strong> Username: Ilana / Password: 2527
           </p>
           <p className="text-xs text-gray-700 text-center">
-            <strong>Partner 2:</strong> partner2@couple.fin / demo123
+            <strong>Binyomin:</strong> Username: Binyomin / Password: 1221
           </p>
         </div>
       </div>
