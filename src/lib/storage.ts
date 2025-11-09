@@ -7,6 +7,8 @@ export interface Transaction {
   date: Date;
   description: string;
   amount: number;
+  currency?: string;
+  amountInNIS?: number;
   category: string;
   type: 'income' | 'expense';
   paymentMethod: 'debit' | 'credit';

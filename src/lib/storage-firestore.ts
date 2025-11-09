@@ -10,6 +10,7 @@ export interface Transaction {
   description: string;
   amount: number;
   currency: string; // Currency code (NIS, USD, EUR, etc.)
+  amountInNIS: number; // Amount converted to NIS for calculations
   category: string;
   type: 'income' | 'expense';
   paymentMethod: 'debit' | 'credit';

@@ -3,6 +3,7 @@ import { useAuth } from '../lib/auth';
 import { transactionStorage, accountStorage, creditStorage, goalStorage, Transaction, Account, CreditSource, SavingsGoal, createTimestamp } from '../lib/storage-firestore';
 import { categoriesStorage } from '../lib/categories-storage';
 import { Plus, Search, Filter, Edit2, Trash2, Download, Upload } from 'lucide-react';
+import { convertToNIS } from '../services/currencyService';
 
 export default function TransactionsPage() {
   const { user, viewMode } = useAuth();
@@ -75,11 +76,11 @@ export default function TransactionsPage() {
 
   const totalIncome = filteredTransactions
     .filter(t => t.type === 'income')
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + (t.amountInNIS || t.amount), 0);
 
   const totalExpenses = filteredTransactions
     .filter(t => t.type === 'expense')
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + (t.amountInNIS || t.amount), 0);
 
   const netAmount = totalIncome - totalExpenses;
 
@@ -342,13 +343,18 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
     e.preventDefault();
     if (!user) return;
 
+    // Convert amount to NIS for calculations
+    const amount = parseFloat(formData.amount);
+    const amountInNIS = await convertToNIS(amount, formData.currency);
+
     // Build transaction data, excluding undefined values (Firestore doesn't allow them)
     const data: any = {
       userId: user.id,
       date: new Date(formData.date).toISOString(),
       description: formData.description,
-      amount: parseFloat(formData.amount),
+      amount: amount,
       currency: formData.currency,
+      amountInNIS: amountInNIS,
       category: formData.category,
       type: formData.type,
       paymentMethod: formData.paymentMethod,

@@ -313,8 +313,8 @@ export default function EnhancedBudgets() {
           t => t.category === b.category && t.type === 'expense'
         );
         
-        // Sum up all expense transactions in this category
-        const calculatedSpent = categoryTransactions.reduce((sum, t) => sum + t.amount, 0);
+        // Sum up all expense transactions in this category (use NIS amounts)
+        const calculatedSpent = categoryTransactions.reduce((sum, t) => sum + (t.amountInNIS || t.amount), 0);
         
         return {
           id: b.id,

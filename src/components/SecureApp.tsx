@@ -136,14 +136,15 @@ function DashboardPage() {
 
     const income = monthlyTransactions
       .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + (t.amountInNIS || t.amount), 0);
 
     const expenses = monthlyTransactions
       .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + (t.amountInNIS || t.amount), 0);
 
     const balance = transactions.reduce((sum, t) => {
-      return sum + (t.type === 'income' ? t.amount : -t.amount);
+      const amt = t.amountInNIS || t.amount;
+      return sum + (t.type === 'income' ? amt : -amt);
     }, 0);
 
     const savingsRate = income > 0 ? ((income - expenses) / income) * 100 : 0;

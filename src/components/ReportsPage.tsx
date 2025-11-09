@@ -48,10 +48,11 @@ export default function ReportsPage() {
         categoryMap.set(t.category, { income: 0, expense: 0 });
       }
       const cat = categoryMap.get(t.category)!;
+      const amt = t.amountInNIS || t.amount;
       if (t.type === 'income') {
-        cat.income += t.amount;
+        cat.income += amt;
       } else {
-        cat.expense += t.amount;
+        cat.expense += amt;
       }
     });
 
@@ -73,10 +74,11 @@ export default function ReportsPage() {
         monthMap.set(monthKey, { income: 0, expense: 0 });
       }
       const month = monthMap.get(monthKey)!;
+      const amt = t.amountInNIS || t.amount;
       if (t.type === 'income') {
-        month.income += t.amount;
+        month.income += amt;
       } else {
-        month.expense += t.amount;
+        month.expense += amt;
       }
     });
 
