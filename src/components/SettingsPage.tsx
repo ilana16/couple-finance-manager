@@ -356,6 +356,34 @@ function CategorySettings() {
 
 function DataManagement() {
   const [importing, setImporting] = useState(false);
+  const [migrating, setMigrating] = useState(false);
+  const [migrationResult, setMigrationResult] = useState<any>(null);
+
+  const handleMigrateToFirebase = async () => {
+    if (!confirm('This will migrate all your data from local storage to Firebase cloud storage. This process cannot be undone. Continue?')) {
+      return;
+    }
+
+    setMigrating(true);
+    setMigrationResult(null);
+
+    try {
+      const { migrateLocalStorageToFirestore } = await import('../lib/migrate-to-firestore');
+      const result = await migrateLocalStorageToFirestore();
+      setMigrationResult(result);
+      
+      if (result.success) {
+        alert(`Migration successful! Migrated: ${result.migrated.transactions} transactions, ${result.migrated.budgets} budgets, ${result.migrated.goals} goals, ${result.migrated.accounts} accounts, ${result.migrated.creditSources} credit sources, ${result.migrated.notes} notes, ${result.migrated.reminders} reminders.`);
+      } else {
+        alert(`Migration completed with errors. Please check the results.`);
+      }
+    } catch (error) {
+      alert(`Migration failed: ${error}`);
+      setMigrationResult({ success: false, errors: [String(error)] });
+    } finally {
+      setMigrating(false);
+    }
+  };
 
   const handleExportData = () => {
     const data = {
@@ -453,10 +481,78 @@ function DataManagement() {
 
   return (
     <div className="space-y-6">
+      {/* Firebase Migration Section */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+        <div className="flex items-start gap-4">
+          <Database className="w-8 h-8 text-blue-600 flex-shrink-0" />
+          <div className="flex-1">
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Cloud Storage Migration</h2>
+            <p className="text-gray-700 mb-4">
+              Migrate your data from local browser storage to Firebase cloud storage for universal access across all devices.
+            </p>
+            
+            <div className="bg-white rounded-lg p-4 mb-4">
+              <h3 className="font-semibold text-gray-900 mb-2">Benefits of Cloud Storage:</h3>
+              <ul className="space-y-1 text-sm text-gray-600">
+                <li>✅ Access your data from any device</li>
+                <li>✅ Real-time synchronization between devices</li>
+                <li>✅ Automatic backups and data recovery</li>
+                <li>✅ Share data seamlessly between partners</li>
+                <li>✅ No data loss when clearing browser cache</li>
+              </ul>
+            </div>
+
+            <button
+              onClick={handleMigrateToFirebase}
+              disabled={migrating}
+              className={`px-6 py-3 rounded-lg font-medium flex items-center gap-2 ${
+                migrating
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
+              }`}
+            >
+              <Database className="w-5 h-5" />
+              {migrating ? 'Migrating...' : 'Migrate to Cloud Storage'}
+            </button>
+
+            {migrationResult && (
+              <div className={`mt-4 p-4 rounded-lg ${
+                migrationResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
+              }`}>
+                <h4 className={`font-semibold mb-2 ${
+                  migrationResult.success ? 'text-green-900' : 'text-red-900'
+                }`}>
+                  {migrationResult.success ? 'Migration Successful!' : 'Migration Failed'}
+                </h4>
+                <div className="text-sm space-y-1">
+                  <p>Transactions: {migrationResult.migrated?.transactions || 0}</p>
+                  <p>Budgets: {migrationResult.migrated?.budgets || 0}</p>
+                  <p>Goals: {migrationResult.migrated?.goals || 0}</p>
+                  <p>Accounts: {migrationResult.migrated?.accounts || 0}</p>
+                  <p>Credit Sources: {migrationResult.migrated?.creditSources || 0}</p>
+                  <p>Notes: {migrationResult.migrated?.notes || 0}</p>
+                  <p>Reminders: {migrationResult.migrated?.reminders || 0}</p>
+                </div>
+                {migrationResult.errors && migrationResult.errors.length > 0 && (
+                  <div className="mt-2">
+                    <p className="font-semibold text-red-900">Errors:</p>
+                    <ul className="text-xs text-red-700 space-y-1 mt-1">
+                      {migrationResult.errors.map((error: string, index: number) => (
+                        <li key={index}>{error}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Data Management</h2>
+        <h2 className="text-xl font-bold text-gray-900 mb-4">Local Data Management</h2>
         <p className="text-gray-600 mb-6">
-          Export, import, or clear your financial data
+          Export, import, or clear your local financial data
         </p>
 
         <div className="space-y-4">
