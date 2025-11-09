@@ -338,7 +338,12 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    alert('handleSubmit called!');
+    console.log('Form data:', formData);
+    if (!user) {
+      alert('No user!');
+      return;
+    }
 
     const data = {
       userId: user.id,
