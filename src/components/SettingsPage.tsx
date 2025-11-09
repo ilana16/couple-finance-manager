@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/auth';
 import { Settings, Download, Upload, Trash2, Database, User, Shield } from 'lucide-react';
 
@@ -117,7 +117,8 @@ function ProfileSettings() {
 }
 
 function CategorySettings() {
-  const [expenseCategories, setExpenseCategories] = useState<string[]>([
+  // Default categories (used only if nothing is saved)
+  const defaultExpenseCategories = [
     'Food',
     'Transportation',
     'Health & Medical',
@@ -126,19 +127,43 @@ function CategorySettings() {
     'Entertainment',
     'Shopping',
     'Other'
-  ]);
-  const [incomeCategories, setIncomeCategories] = useState<string[]>([
+  ];
+  const defaultIncomeCategories = [
     'Salary',
     'Freelance',
     'Investment Income',
     'Rental Income',
     'Business Income',
     'Other Income'
-  ]);
+  ];
+
+  const [expenseCategories, setExpenseCategories] = useState<string[]>(defaultExpenseCategories);
+  const [incomeCategories, setIncomeCategories] = useState<string[]>(defaultIncomeCategories);
   const [newExpenseCategory, setNewExpenseCategory] = useState('');
   const [newIncomeCategory, setNewIncomeCategory] = useState('');
   const [showAddExpenseForm, setShowAddExpenseForm] = useState(false);
   const [showAddIncomeForm, setShowAddIncomeForm] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+
+  // Load categories from localStorage on mount
+  useEffect(() => {
+    const savedExpenseCategories = localStorage.getItem('couple_fin_expense_categories');
+    const savedIncomeCategories = localStorage.getItem('couple_fin_income_categories');
+    
+    if (savedExpenseCategories) {
+      setExpenseCategories(JSON.parse(savedExpenseCategories));
+    } else {
+      // Save defaults if nothing exists
+      localStorage.setItem('couple_fin_expense_categories', JSON.stringify(defaultExpenseCategories));
+    }
+    
+    if (savedIncomeCategories) {
+      setIncomeCategories(JSON.parse(savedIncomeCategories));
+    } else {
+      // Save defaults if nothing exists
+      localStorage.setItem('couple_fin_income_categories', JSON.stringify(defaultIncomeCategories));
+    }
+  }, []);
 
   const handleAddExpenseCategory = (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,6 +173,8 @@ function CategorySettings() {
       setNewExpenseCategory('');
       setShowAddExpenseForm(false);
       localStorage.setItem('couple_fin_expense_categories', JSON.stringify(updated));
+      setSaveMessage('Expense category added and saved!');
+      setTimeout(() => setSaveMessage(''), 3000);
     }
   };
 
@@ -159,6 +186,8 @@ function CategorySettings() {
       setNewIncomeCategory('');
       setShowAddIncomeForm(false);
       localStorage.setItem('couple_fin_income_categories', JSON.stringify(updated));
+      setSaveMessage('Income category added and saved!');
+      setTimeout(() => setSaveMessage(''), 3000);
     }
   };
 
@@ -167,6 +196,8 @@ function CategorySettings() {
       const updated = expenseCategories.filter(c => c !== category);
       setExpenseCategories(updated);
       localStorage.setItem('couple_fin_expense_categories', JSON.stringify(updated));
+      setSaveMessage('Expense category deleted and saved!');
+      setTimeout(() => setSaveMessage(''), 3000);
     }
   };
 
@@ -175,11 +206,23 @@ function CategorySettings() {
       const updated = incomeCategories.filter(c => c !== category);
       setIncomeCategories(updated);
       localStorage.setItem('couple_fin_income_categories', JSON.stringify(updated));
+      setSaveMessage('Income category deleted and saved!');
+      setTimeout(() => setSaveMessage(''), 3000);
     }
   };
 
   return (
     <div className="space-y-8">
+      {/* Save Message */}
+      {saveMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg flex items-center gap-2">
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          </svg>
+          <span className="font-medium">{saveMessage}</span>
+        </div>
+      )}
+      
       {/* Expense Categories */}
       <div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">Expense Categories</h2>
@@ -323,7 +366,12 @@ function DataManagement() {
       investments: localStorage.getItem('couple_fin_investments'),
       notes: localStorage.getItem('couple_fin_notes'),
       reminders: localStorage.getItem('couple_fin_reminders'),
-      categories: localStorage.getItem('couple_fin_categories'),
+      accounts: localStorage.getItem('couple_fin_accounts'),
+      creditSources: localStorage.getItem('couple_fin_credit_sources'),
+      expenseCategories: localStorage.getItem('couple_fin_expense_categories'),
+      incomeCategories: localStorage.getItem('couple_fin_income_categories'),
+      predictions_user1: localStorage.getItem('predictions_user1'),
+      predictions_user2: localStorage.getItem('predictions_user2'),
       exportDate: new Date().toISOString(),
     };
 
@@ -357,6 +405,13 @@ function DataManagement() {
         if (data.investments) localStorage.setItem('couple_fin_investments', data.investments);
         if (data.notes) localStorage.setItem('couple_fin_notes', data.notes);
         if (data.reminders) localStorage.setItem('couple_fin_reminders', data.reminders);
+        if (data.accounts) localStorage.setItem('couple_fin_accounts', data.accounts);
+        if (data.creditSources) localStorage.setItem('couple_fin_credit_sources', data.creditSources);
+        if (data.expenseCategories) localStorage.setItem('couple_fin_expense_categories', data.expenseCategories);
+        if (data.incomeCategories) localStorage.setItem('couple_fin_income_categories', data.incomeCategories);
+        if (data.predictions_user1) localStorage.setItem('predictions_user1', data.predictions_user1);
+        if (data.predictions_user2) localStorage.setItem('predictions_user2', data.predictions_user2);
+        // Legacy support for old category format
         if (data.categories) localStorage.setItem('couple_fin_categories', data.categories);
         
         alert('Data imported successfully! Please refresh the page to see your data.');
@@ -372,7 +427,7 @@ function DataManagement() {
 
   const handleClearAllData = () => {
     if (confirm('⚠️ WARNING: This will delete ALL your financial data permanently. This cannot be undone. Are you sure?')) {
-      if (confirm('Are you ABSOLUTELY sure? This will delete all transactions, budgets, goals, debts, investments, notes, and reminders.')) {
+      if (confirm('Are you ABSOLUTELY sure? This will delete all transactions, budgets, goals, debts, investments, notes, reminders, categories, and predictions.')) {
         localStorage.removeItem('couple_fin_transactions');
         localStorage.removeItem('couple_fin_budgets');
         localStorage.removeItem('couple_fin_goals');
@@ -380,8 +435,15 @@ function DataManagement() {
         localStorage.removeItem('couple_fin_investments');
         localStorage.removeItem('couple_fin_notes');
         localStorage.removeItem('couple_fin_reminders');
+        localStorage.removeItem('couple_fin_accounts');
+        localStorage.removeItem('couple_fin_credit_sources');
+        localStorage.removeItem('couple_fin_expense_categories');
+        localStorage.removeItem('couple_fin_income_categories');
+        localStorage.removeItem('predictions_user1');
+        localStorage.removeItem('predictions_user2');
         
-        alert('All data has been cleared. Please refresh the page.');
+        alert('All data has been cleared. The page will now reload.');
+        window.location.reload();
       }
     }
   };
