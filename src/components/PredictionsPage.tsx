@@ -155,6 +155,51 @@ export default function PredictionsPage() {
     alert(`Copied ${newIncome.length} income and ${newExpenses.length} expense predictions from Joint. Remember to save!`);
   };
 
+  // Copy from Individual predictions to Joint
+  const copyFromIndividual = () => {
+    if (viewMode === 'individual') {
+      alert('Already in Individual mode. Switch to Joint mode to copy from Individual.');
+      return;
+    }
+
+    if (!user) return;
+
+    const individualData = localStorage.getItem(`predictions_${user.id}`);
+    if (!individualData) {
+      alert('No individual predictions found. Please create individual predictions first.');
+      return;
+    }
+
+    const individualPredictions = JSON.parse(individualData);
+    const individualIncome = individualPredictions.income || [];
+    const individualExpenses = individualPredictions.expenses || [];
+
+    if (individualIncome.length === 0 && individualExpenses.length === 0) {
+      alert('Individual predictions are empty. Nothing to copy.');
+      return;
+    }
+
+    // Check for duplicates and merge
+    const existingIncomeCategories = new Set(predictions.income.map(i => i.category));
+    const existingExpenseCategories = new Set(predictions.expenses.map(e => e.category));
+
+    const newIncome = individualIncome.filter((item: CategoryPrediction) => !existingIncomeCategories.has(item.category));
+    const newExpenses = individualExpenses.filter((item: CategoryPrediction) => !existingExpenseCategories.has(item.category));
+
+    if (newIncome.length === 0 && newExpenses.length === 0) {
+      alert('All individual predictions already exist in joint predictions. No new items to copy.');
+      return;
+    }
+
+    setPredictions({
+      ...predictions,
+      income: [...predictions.income, ...newIncome],
+      expenses: [...predictions.expenses, ...newExpenses],
+    });
+
+    alert(`Copied ${newIncome.length} income and ${newExpenses.length} expense predictions from Individual. Remember to save!`);
+  };
+
   // Calculate monthly equivalent
   const toMonthly = (amount: number, frequency: string) => {
     if (frequency === 'weekly') return amount * 4.33;
@@ -418,6 +463,15 @@ export default function PredictionsPage() {
           >
             <Download className="w-5 h-5" />
             Copy from Joint
+          </button>
+        )}
+        {viewMode === 'joint' && (
+          <button
+            onClick={copyFromIndividual}
+            className="px-6 py-3 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 flex items-center gap-2"
+          >
+            <Download className="w-5 h-5" />
+            Copy from Individual
           </button>
         )}
         <button
