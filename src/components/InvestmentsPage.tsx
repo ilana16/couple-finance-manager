@@ -44,7 +44,7 @@ export default function InvestmentsPage() {
     if (!user) return;
     const all = getInvestments();
     const filtered = viewMode === 'joint' 
-      ? all.filter(i => i.userId === user.id || i.isJoint)
+      ? all // In joint mode, show ALL investments from both partners
       : all.filter(i => i.userId === user.id);
     setInvestments(filtered);
   };

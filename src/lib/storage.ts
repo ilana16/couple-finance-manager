@@ -194,7 +194,12 @@ export const transactionStorage = {
   
   getByUser: (userId: string, includeJoint: boolean = true): Transaction[] => {
     const all = transactionStorage.getAll();
-    return all.filter(t => t.userId === userId || (includeJoint && t.isJoint));
+    if (includeJoint) {
+      // In joint mode, show ALL transactions (from both partners)
+      return all;
+    }
+    // In individual mode, show only current user's transactions
+    return all.filter(t => t.userId === userId);
   },
   
   create: (data: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>): Transaction => {
@@ -244,7 +249,12 @@ export const budgetStorage = {
   
   getByUser: (userId: string, includeJoint: boolean = true): Budget[] => {
     const all = budgetStorage.getAll();
-    return all.filter(b => b.userId === userId || (includeJoint && b.isJoint));
+    if (includeJoint) {
+      // In joint mode, show ALL budgets (from both partners)
+      return all;
+    }
+    // In individual mode, show only current user's budgets
+    return all.filter(b => b.userId === userId);
   },
   
   create: (data: Omit<Budget, 'id' | 'createdAt' | 'updatedAt'>): Budget => {
@@ -294,7 +304,12 @@ export const goalStorage = {
   
   getByUser: (userId: string, includeJoint: boolean = true): SavingsGoal[] => {
     const all = goalStorage.getAll();
-    return all.filter(g => g.userId === userId || (includeJoint && g.isJoint));
+    if (includeJoint) {
+      // In joint mode, show ALL goals (from both partners)
+      return all;
+    }
+    // In individual mode, show only current user's goals
+    return all.filter(g => g.userId === userId);
   },
   
   create: (data: Omit<SavingsGoal, 'id' | 'createdAt' | 'updatedAt'>): SavingsGoal => {
@@ -465,9 +480,13 @@ export const accountStorage = {
   getAll: (): Account[] => getItems<Account>(KEYS.ACCOUNTS),
   
   getByUser: (userId: string, includeJoint: boolean = true): Account[] => {
-    return accountStorage.getAll().filter(a => 
-      a.userId === userId || (includeJoint && a.isJoint)
-    );
+    const all = accountStorage.getAll();
+    if (includeJoint) {
+      // In joint mode, show ALL accounts (from both partners)
+      return all;
+    }
+    // In individual mode, show only current user's accounts
+    return all.filter(a => a.userId === userId);
   },
   
   getById: (id: string): Account | null => {
@@ -532,9 +551,13 @@ export const creditStorage = {
   getAll: (): CreditSource[] => getItems<CreditSource>(KEYS.CREDIT_SOURCES),
   
   getByUser: (userId: string, includeJoint: boolean = true): CreditSource[] => {
-    return creditStorage.getAll().filter(c => 
-      c.userId === userId || (includeJoint && c.isJoint)
-    );
+    const all = creditStorage.getAll();
+    if (includeJoint) {
+      // In joint mode, show ALL credit sources (from both partners)
+      return all;
+    }
+    // In individual mode, show only current user's credit sources
+    return all.filter(c => c.userId === userId);
   },
   
   getById: (id: string): CreditSource | null => {

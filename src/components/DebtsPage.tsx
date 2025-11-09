@@ -47,7 +47,7 @@ export default function DebtsPage() {
     if (!user) return;
     const all = getDebts();
     const filtered = viewMode === 'joint' 
-      ? all.filter(d => d.userId === user.id || d.isJoint)
+      ? all // In joint mode, show ALL debts from both partners
       : all.filter(d => d.userId === user.id);
     setDebts(filtered);
   };

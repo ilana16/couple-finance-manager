@@ -143,28 +143,50 @@ function DashboardPage() {
     const savingsRate = income > 0 ? ((income - expenses) / income) * 100 : 0;
 
     // Load predictions
-    const predictionsData = localStorage.getItem(`predictions_${user.id}`);
     let predictedIncome = 0;
     let predictedExpenses = 0;
     
-    if (predictionsData) {
-      const predictions = JSON.parse(predictionsData);
-      const toMonthly = (amount: number, frequency: string) => {
-        if (frequency === 'weekly') return amount * 4.33;
-        if (frequency === 'monthly') return amount;
-        if (frequency === 'yearly') return amount / 12;
-        return amount;
-      };
+    const toMonthly = (amount: number, frequency: string) => {
+      if (frequency === 'weekly') return amount * 4.33;
+      if (frequency === 'monthly') return amount;
+      if (frequency === 'yearly') return amount / 12;
+      return amount;
+    };
+    
+    if (viewMode === 'joint') {
+      // In joint mode, combine predictions from both partners
+      const user1Data = localStorage.getItem('predictions_user1');
+      const user2Data = localStorage.getItem('predictions_user2');
       
-      predictedIncome = predictions.income?.reduce(
-        (sum: number, item: any) => sum + toMonthly(item.amount, item.frequency),
-        0
-      ) || 0;
-      
-      predictedExpenses = predictions.expenses?.reduce(
-        (sum: number, item: any) => sum + toMonthly(item.amount, item.frequency),
-        0
-      ) || 0;
+      [user1Data, user2Data].forEach(data => {
+        if (data) {
+          const predictions = JSON.parse(data);
+          predictedIncome += predictions.income?.reduce(
+            (sum: number, item: any) => sum + toMonthly(item.amount, item.frequency),
+            0
+          ) || 0;
+          
+          predictedExpenses += predictions.expenses?.reduce(
+            (sum: number, item: any) => sum + toMonthly(item.amount, item.frequency),
+            0
+          ) || 0;
+        }
+      });
+    } else {
+      // In individual mode, show only current user's predictions
+      const predictionsData = localStorage.getItem(`predictions_${user.id}`);
+      if (predictionsData) {
+        const predictions = JSON.parse(predictionsData);
+        predictedIncome = predictions.income?.reduce(
+          (sum: number, item: any) => sum + toMonthly(item.amount, item.frequency),
+          0
+        ) || 0;
+        
+        predictedExpenses = predictions.expenses?.reduce(
+          (sum: number, item: any) => sum + toMonthly(item.amount, item.frequency),
+          0
+        ) || 0;
+      }
     }
 
     setStats({
