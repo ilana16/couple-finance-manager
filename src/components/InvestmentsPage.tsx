@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/auth';
 import { TrendingUp, Plus, Edit2, Trash2, DollarSign } from 'lucide-react';
+import { FirestoreStorage, createTimestamp } from '../lib/firestore-storage';
 
 interface Investment {
   id: string;
@@ -9,51 +10,49 @@ interface Investment {
   type: string;
   amount: number;
   currentValue: number;
-  purchaseDate: Date;
+  purchaseDate: string;
   isJoint: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
-const getInvestments = (): Investment[] => {
-  const data = localStorage.getItem('couple_fin_investments');
-  if (!data) return [];
-  return JSON.parse(data).map((i: any) => ({
-    ...i,
-    purchaseDate: new Date(i.purchaseDate),
-    createdAt: new Date(i.createdAt),
-    updatedAt: new Date(i.updatedAt),
-  }));
-};
-
-const saveInvestments = (investments: Investment[]) => {
-  localStorage.setItem('couple_fin_investments', JSON.stringify(investments));
-};
+const investmentStorage = new FirestoreStorage<Investment>('investments');
 
 export default function InvestmentsPage() {
   const { user, viewMode } = useAuth();
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadInvestments();
   }, [user, viewMode]);
 
-  const loadInvestments = () => {
+  const loadInvestments = async () => {
     if (!user) return;
-    const all = getInvestments();
-    const filtered = viewMode === 'joint' 
-      ? all // In joint mode, show ALL investments from both partners
-      : all.filter(i => i.userId === user.id);
-    setInvestments(filtered);
+    setLoading(true);
+    try {
+      const includeJoint = viewMode === 'joint';
+      const data = await investmentStorage.getByUser(user.id, includeJoint);
+      setInvestments(data);
+    } catch (error) {
+      console.error('Error loading investments:', error);
+      alert('Failed to load investments. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this investment?')) {
-      const all = getInvestments();
-      saveInvestments(all.filter(i => i.id !== id));
-      loadInvestments();
+      try {
+        await investmentStorage.delete(id);
+        await loadInvestments();
+      } catch (error) {
+        console.error('Error deleting investment:', error);
+        alert('Failed to delete investment. Please try again.');
+      }
     }
   };
 
@@ -61,6 +60,19 @@ export default function InvestmentsPage() {
   const totalCurrentValue = investments.reduce((sum, i) => sum + i.currentValue, 0);
   const totalGainLoss = totalCurrentValue - totalInvested;
   const totalReturn = totalInvested > 0 ? ((totalGainLoss / totalInvested) * 100) : 0;
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading investments...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -230,32 +242,33 @@ function InvestmentModal({ investment, onClose, onSave }: any) {
 
   const investmentTypes = ['Stocks', 'Bonds', 'Mutual Funds', 'ETFs', 'Real Estate', 'Cryptocurrency', 'Other'];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    const newInvestment: Investment = {
-      id: investment?.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    const data = {
       userId: user.id,
       name: formData.name,
       type: formData.type,
       amount: parseFloat(formData.amount),
       currentValue: parseFloat(formData.currentValue),
-      purchaseDate: new Date(formData.purchaseDate),
+      purchaseDate: new Date(formData.purchaseDate).toISOString(),
       isJoint: formData.isJoint,
-      createdAt: investment?.createdAt || new Date(),
-      updatedAt: new Date(),
+      createdAt: investment?.createdAt || createTimestamp(),
+      updatedAt: createTimestamp(),
     };
 
-    const all = getInvestments();
-    if (investment) {
-      const index = all.findIndex(i => i.id === investment.id);
-      all[index] = newInvestment;
-    } else {
-      all.push(newInvestment);
+    try {
+      if (investment) {
+        await investmentStorage.update(investment.id, data);
+      } else {
+        await investmentStorage.create(data);
+      }
+      onSave();
+    } catch (error) {
+      console.error('Error saving investment:', error);
+      alert('Failed to save investment. Please try again.');
     }
-    saveInvestments(all);
-    onSave();
   };
 
   return (

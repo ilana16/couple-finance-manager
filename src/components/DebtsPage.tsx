@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/auth';
 import { CreditCard, Plus, Edit2, Trash2, Calculator } from 'lucide-react';
+import { FirestoreStorage, createTimestamp } from '../lib/firestore-storage';
 
 interface Debt {
   id: string;
@@ -10,27 +11,13 @@ interface Debt {
   remainingAmount: number;
   interestRate: number;
   minimumPayment: number;
-  dueDate: Date;
+  dueDate: string;
   isJoint: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
-// Simple storage functions
-const getDebts = (): Debt[] => {
-  const data = localStorage.getItem('couple_fin_debts');
-  if (!data) return [];
-  return JSON.parse(data).map((d: any) => ({
-    ...d,
-    dueDate: new Date(d.dueDate),
-    createdAt: new Date(d.createdAt),
-    updatedAt: new Date(d.updatedAt),
-  }));
-};
-
-const saveDebts = (debts: Debt[]) => {
-  localStorage.setItem('couple_fin_debts', JSON.stringify(debts));
-};
+const debtStorage = new FirestoreStorage<Debt>('debts');
 
 export default function DebtsPage() {
   const { user, viewMode } = useAuth();
@@ -38,25 +25,36 @@ export default function DebtsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
   const [showCalculator, setShowCalculator] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadDebts();
   }, [user, viewMode]);
 
-  const loadDebts = () => {
+  const loadDebts = async () => {
     if (!user) return;
-    const all = getDebts();
-    const filtered = viewMode === 'joint' 
-      ? all // In joint mode, show ALL debts from both partners
-      : all.filter(d => d.userId === user.id);
-    setDebts(filtered);
+    setLoading(true);
+    try {
+      const includeJoint = viewMode === 'joint';
+      const data = await debtStorage.getByUser(user.id, includeJoint);
+      setDebts(data.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()));
+    } catch (error) {
+      console.error('Error loading debts:', error);
+      alert('Failed to load debts. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this debt?')) {
-      const all = getDebts();
-      saveDebts(all.filter(d => d.id !== id));
-      loadDebts();
+      try {
+        await debtStorage.delete(id);
+        await loadDebts();
+      } catch (error) {
+        console.error('Error deleting debt:', error);
+        alert('Failed to delete debt. Please try again.');
+      }
     }
   };
 
@@ -64,6 +62,19 @@ export default function DebtsPage() {
   const totalPaid = debts.reduce((sum, d) => sum + (d.totalAmount - d.remainingAmount), 0);
   const totalOriginal = debts.reduce((sum, d) => sum + d.totalAmount, 0);
   const overallProgress = totalOriginal > 0 ? (totalPaid / totalOriginal) * 100 : 0;
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading debts...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -237,33 +248,34 @@ function DebtModal({ debt, onClose, onSave }: any) {
     isJoint: debt?.isJoint ?? true,
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    const newDebt: Debt = {
-      id: debt?.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    const data = {
       userId: user.id,
       name: formData.name,
       totalAmount: parseFloat(formData.totalAmount),
       remainingAmount: parseFloat(formData.remainingAmount),
       interestRate: parseFloat(formData.interestRate),
       minimumPayment: parseFloat(formData.minimumPayment),
-      dueDate: new Date(formData.dueDate),
+      dueDate: new Date(formData.dueDate).toISOString(),
       isJoint: formData.isJoint,
-      createdAt: debt?.createdAt || new Date(),
-      updatedAt: new Date(),
+      createdAt: debt?.createdAt || createTimestamp(),
+      updatedAt: createTimestamp(),
     };
 
-    const all = getDebts();
-    if (debt) {
-      const index = all.findIndex(d => d.id === debt.id);
-      all[index] = newDebt;
-    } else {
-      all.push(newDebt);
+    try {
+      if (debt) {
+        await debtStorage.update(debt.id, data);
+      } else {
+        await debtStorage.create(data);
+      }
+      onSave();
+    } catch (error) {
+      console.error('Error saving debt:', error);
+      alert('Failed to save debt. Please try again.');
     }
-    saveDebts(all);
-    onSave();
   };
 
   return (

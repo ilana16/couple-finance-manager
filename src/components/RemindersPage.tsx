@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/auth';
 import { Bell, Plus, Edit2, Trash2, Check, Clock } from 'lucide-react';
+import { FirestoreStorage, createTimestamp } from '../lib/firestore-storage';
 
 interface Reminder {
   id: string;
@@ -8,27 +9,14 @@ interface Reminder {
   userName: string;
   title: string;
   description: string;
-  dueDate: Date;
+  dueDate: string;
   priority: 'low' | 'medium' | 'high';
   isCompleted: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
-const getReminders = (): Reminder[] => {
-  const data = localStorage.getItem('couple_fin_reminders');
-  if (!data) return [];
-  return JSON.parse(data).map((r: any) => ({
-    ...r,
-    dueDate: new Date(r.dueDate),
-    createdAt: new Date(r.createdAt),
-    updatedAt: new Date(r.updatedAt),
-  }));
-};
-
-const saveReminders = (reminders: Reminder[]) => {
-  localStorage.setItem('couple_fin_reminders', JSON.stringify(reminders));
-};
+const reminderStorage = new FirestoreStorage<Reminder>('reminders');
 
 export default function RemindersPage() {
   const { user } = useAuth();
@@ -36,36 +24,54 @@ export default function RemindersPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('active');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadReminders();
   }, [user]);
 
-  const loadReminders = () => {
+  const loadReminders = async () => {
     if (!user) return;
-    const all = getReminders();
-    setReminders(all.sort((a, b) => {
-      if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
-      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-    }));
-  };
-
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this reminder?')) {
-      const all = getReminders();
-      saveReminders(all.filter(r => r.id !== id));
-      loadReminders();
+    setLoading(true);
+    try {
+      const all = await reminderStorage.getAll();
+      setReminders(all.sort((a, b) => {
+        if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
+        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      }));
+    } catch (error) {
+      console.error('Error loading reminders:', error);
+      alert('Failed to load reminders. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const toggleComplete = (id: string) => {
-    const all = getReminders();
-    const reminder = all.find(r => r.id === id);
-    if (reminder) {
-      reminder.isCompleted = !reminder.isCompleted;
-      reminder.updatedAt = new Date();
-      saveReminders(all);
-      loadReminders();
+  const handleDelete = async (id: string) => {
+    if (confirm('Are you sure you want to delete this reminder?')) {
+      try {
+        await reminderStorage.delete(id);
+        await loadReminders();
+      } catch (error) {
+        console.error('Error deleting reminder:', error);
+        alert('Failed to delete reminder. Please try again.');
+      }
+    }
+  };
+
+  const toggleComplete = async (id: string) => {
+    try {
+      const reminder = reminders.find(r => r.id === id);
+      if (reminder) {
+        await reminderStorage.update(id, {
+          isCompleted: !reminder.isCompleted,
+          updatedAt: createTimestamp(),
+        });
+        await loadReminders();
+      }
+    } catch (error) {
+      console.error('Error toggling reminder:', error);
+      alert('Failed to update reminder. Please try again.');
     }
   };
 
@@ -77,6 +83,19 @@ export default function RemindersPage() {
 
   const activeCount = reminders.filter(r => !r.isCompleted).length;
   const overdueCount = reminders.filter(r => !r.isCompleted && new Date(r.dueDate) < new Date()).length;
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading reminders...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -286,32 +305,33 @@ function ReminderModal({ reminder, onClose, onSave }: any) {
     priority: reminder?.priority || 'medium' as 'low' | 'medium' | 'high',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    const newReminder: Reminder = {
-      id: reminder?.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    const data = {
       userId: user.id,
       userName: user.name,
       title: formData.title,
       description: formData.description,
-      dueDate: new Date(formData.dueDate),
+      dueDate: new Date(formData.dueDate).toISOString(),
       priority: formData.priority,
       isCompleted: reminder?.isCompleted || false,
-      createdAt: reminder?.createdAt || new Date(),
-      updatedAt: new Date(),
+      createdAt: reminder?.createdAt || createTimestamp(),
+      updatedAt: createTimestamp(),
     };
 
-    const all = getReminders();
-    if (reminder) {
-      const index = all.findIndex(r => r.id === reminder.id);
-      all[index] = newReminder;
-    } else {
-      all.push(newReminder);
+    try {
+      if (reminder) {
+        await reminderStorage.update(reminder.id, data);
+      } else {
+        await reminderStorage.create(data);
+      }
+      onSave();
+    } catch (error) {
+      console.error('Error saving reminder:', error);
+      alert('Failed to save reminder. Please try again.');
     }
-    saveReminders(all);
-    onSave();
   };
 
   return (

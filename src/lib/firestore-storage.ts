@@ -120,3 +120,8 @@ export function dateToTimestamp(date: string | Date): Timestamp {
   }
   return Timestamp.fromDate(date);
 }
+
+// Helper function to create current timestamp as ISO string
+export function createTimestamp(): string {
+  return new Date().toISOString();
+}

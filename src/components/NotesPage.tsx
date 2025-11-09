@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/auth';
 import { FileText, Plus, Edit2, Trash2, Pin } from 'lucide-react';
+import { FirestoreStorage, createTimestamp } from '../lib/firestore-storage';
 
 interface Note {
   id: string;
@@ -9,23 +10,11 @@ interface Note {
   title: string;
   content: string;
   isPinned: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
-const getNotes = (): Note[] => {
-  const data = localStorage.getItem('couple_fin_notes');
-  if (!data) return [];
-  return JSON.parse(data).map((n: any) => ({
-    ...n,
-    createdAt: new Date(n.createdAt),
-    updatedAt: new Date(n.updatedAt),
-  }));
-};
-
-const saveNotes = (notes: Note[]) => {
-  localStorage.setItem('couple_fin_notes', JSON.stringify(notes));
-};
+const noteStorage = new FirestoreStorage<Note>('notes');
 
 export default function NotesPage() {
   const { user } = useAuth();
@@ -33,36 +22,54 @@ export default function NotesPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadNotes();
   }, [user]);
 
-  const loadNotes = () => {
+  const loadNotes = async () => {
     if (!user) return;
-    const all = getNotes();
-    setNotes(all.sort((a, b) => {
-      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-    }));
-  };
-
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this note?')) {
-      const all = getNotes();
-      saveNotes(all.filter(n => n.id !== id));
-      loadNotes();
+    setLoading(true);
+    try {
+      const all = await noteStorage.getAll();
+      setNotes(all.sort((a, b) => {
+        if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      }));
+    } catch (error) {
+      console.error('Error loading notes:', error);
+      alert('Failed to load notes. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const togglePin = (id: string) => {
-    const all = getNotes();
-    const note = all.find(n => n.id === id);
-    if (note) {
-      note.isPinned = !note.isPinned;
-      note.updatedAt = new Date();
-      saveNotes(all);
-      loadNotes();
+  const handleDelete = async (id: string) => {
+    if (confirm('Are you sure you want to delete this note?')) {
+      try {
+        await noteStorage.delete(id);
+        await loadNotes();
+      } catch (error) {
+        console.error('Error deleting note:', error);
+        alert('Failed to delete note. Please try again.');
+      }
+    }
+  };
+
+  const togglePin = async (id: string) => {
+    try {
+      const note = notes.find(n => n.id === id);
+      if (note) {
+        await noteStorage.update(id, {
+          isPinned: !note.isPinned,
+          updatedAt: createTimestamp(),
+        });
+        await loadNotes();
+      }
+    } catch (error) {
+      console.error('Error toggling pin:', error);
+      alert('Failed to update note. Please try again.');
     }
   };
 
@@ -73,6 +80,19 @@ export default function NotesPage() {
 
   const pinnedNotes = filteredNotes.filter(n => n.isPinned);
   const unpinnedNotes = filteredNotes.filter(n => !n.isPinned);
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading notes...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -221,30 +241,31 @@ function NoteModal({ note, onClose, onSave }: any) {
     content: note?.content || '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    const newNote: Note = {
-      id: note?.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    const data = {
       userId: user.id,
       userName: user.name,
       title: formData.title,
       content: formData.content,
       isPinned: note?.isPinned || false,
-      createdAt: note?.createdAt || new Date(),
-      updatedAt: new Date(),
+      createdAt: note?.createdAt || createTimestamp(),
+      updatedAt: createTimestamp(),
     };
 
-    const all = getNotes();
-    if (note) {
-      const index = all.findIndex(n => n.id === note.id);
-      all[index] = newNote;
-    } else {
-      all.push(newNote);
+    try {
+      if (note) {
+        await noteStorage.update(note.id, data);
+      } else {
+        await noteStorage.create(data);
+      }
+      onSave();
+    } catch (error) {
+      console.error('Error saving note:', error);
+      alert('Failed to save note. Please try again.');
     }
-    saveNotes(all);
-    onSave();
   };
 
   return (
