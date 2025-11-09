@@ -9,6 +9,7 @@ export interface Transaction {
   date: string; // ISO string for Firestore
   description: string;
   amount: number;
+  currency: string; // Currency code (NIS, USD, EUR, etc.)
   category: string;
   type: 'income' | 'expense';
   paymentMethod: 'debit' | 'credit';
