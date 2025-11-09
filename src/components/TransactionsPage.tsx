@@ -307,6 +307,7 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
     recurringEndDate: transaction?.recurringEndDate ? new Date(transaction.recurringEndDate).toISOString().split('T')[0] : '',
     isJoint: transaction?.isJoint ?? true,
     notes: transaction?.notes || '',
+    addToSavings: transaction?.savingsGoalId ? true : false,
     savingsGoalId: transaction?.savingsGoalId || '',
   });
 
@@ -338,12 +339,7 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert('handleSubmit called!');
-    console.log('Form data:', formData);
-    if (!user) {
-      alert('No user!');
-      return;
-    }
+    if (!user) return;
 
     const data = {
       userId: user.id,
@@ -676,23 +672,38 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Add to Savings Goal (Optional)</label>
-            <select
-              value={formData.savingsGoalId}
-              onChange={(e) => setFormData({ ...formData, savingsGoalId: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="">None - Don't add to savings</option>
-              {savingsGoals.map(goal => (
-                <option key={goal.id} value={goal.id}>
-                  {goal.name} (₪{goal.currentAmount.toFixed(2)} / ₪{goal.targetAmount.toFixed(2)})
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-gray-500 mt-1">
-              Transaction amount will be added to the selected savings goal
-            </p>
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.addToSavings}
+                onChange={(e) => setFormData({ ...formData, addToSavings: e.target.checked, savingsGoalId: e.target.checked ? formData.savingsGoalId : '' })}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <span className="text-sm font-medium text-gray-700">Add to Savings Goal</span>
+            </label>
           </div>
+
+          {formData.addToSavings && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Select Savings Goal</label>
+              <select
+                value={formData.savingsGoalId}
+                onChange={(e) => setFormData({ ...formData, savingsGoalId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              >
+                <option value="">Select a goal...</option>
+                {savingsGoals.map(goal => (
+                  <option key={goal.id} value={goal.id}>
+                    {goal.name} (₪{goal.currentAmount.toFixed(2)} / ₪{goal.targetAmount.toFixed(2)})
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Transaction amount will be added to the selected savings goal
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
