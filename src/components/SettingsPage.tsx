@@ -372,6 +372,7 @@ function DataManagement() {
       incomeCategories: localStorage.getItem('couple_fin_income_categories'),
       predictions_user1: localStorage.getItem('predictions_user1'),
       predictions_user2: localStorage.getItem('predictions_user2'),
+      predictions_joint: localStorage.getItem('predictions_joint'),
       exportDate: new Date().toISOString(),
     };
 
@@ -411,6 +412,7 @@ function DataManagement() {
         if (data.incomeCategories) localStorage.setItem('couple_fin_income_categories', data.incomeCategories);
         if (data.predictions_user1) localStorage.setItem('predictions_user1', data.predictions_user1);
         if (data.predictions_user2) localStorage.setItem('predictions_user2', data.predictions_user2);
+        if (data.predictions_joint) localStorage.setItem('predictions_joint', data.predictions_joint);
         // Legacy support for old category format
         if (data.categories) localStorage.setItem('couple_fin_categories', data.categories);
         
@@ -441,6 +443,7 @@ function DataManagement() {
         localStorage.removeItem('couple_fin_income_categories');
         localStorage.removeItem('predictions_user1');
         localStorage.removeItem('predictions_user2');
+        localStorage.removeItem('predictions_joint');
         
         alert('All data has been cleared. The page will now reload.');
         window.location.reload();

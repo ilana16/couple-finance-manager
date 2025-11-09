@@ -307,17 +307,12 @@ export default function EnhancedBudgets() {
     let allExpensePredictions: any[] = [];
     
     if (viewMode === 'joint') {
-      // In joint mode, import from both partners
-      const user1Data = localStorage.getItem('predictions_user1');
-      const user2Data = localStorage.getItem('predictions_user2');
-      
-      [user1Data, user2Data].forEach(data => {
-        if (data) {
-          const predictions = JSON.parse(data);
-          const expenses = predictions.expenses || [];
-          allExpensePredictions.push(...expenses);
-        }
-      });
+      // In joint mode, import from shared joint predictions
+      const jointData = localStorage.getItem('predictions_joint');
+      if (jointData) {
+        const predictions = JSON.parse(jointData);
+        allExpensePredictions = predictions.expenses || [];
+      }
     } else {
       // In individual mode, import only from current user
       const saved = localStorage.getItem(`predictions_${user.id}`);
@@ -380,23 +375,19 @@ export default function EnhancedBudgets() {
     let monthlyIncome = 0;
     
     if (viewMode === 'joint') {
-      // In joint mode, combine predictions from both partners
-      const user1Data = localStorage.getItem('predictions_user1');
-      const user2Data = localStorage.getItem('predictions_user2');
-      
-      [user1Data, user2Data].forEach(data => {
-        if (data) {
-          const predictions = JSON.parse(data);
-          const incomePredictions = predictions.income || [];
-          
-          monthlyIncome += incomePredictions.reduce((sum: number, pred: any) => {
-            let amount = pred.amount;
-            if (pred.frequency === 'weekly') amount = pred.amount * 4.33;
-            if (pred.frequency === 'yearly') amount = pred.amount / 12;
-            return sum + amount;
-          }, 0);
-        }
-      });
+      // In joint mode, use shared joint predictions
+      const jointData = localStorage.getItem('predictions_joint');
+      if (jointData) {
+        const predictions = JSON.parse(jointData);
+        const incomePredictions = predictions.income || [];
+        
+        monthlyIncome = incomePredictions.reduce((sum: number, pred: any) => {
+          let amount = pred.amount;
+          if (pred.frequency === 'weekly') amount = pred.amount * 4.33;
+          if (pred.frequency === 'yearly') amount = pred.amount / 12;
+          return sum + amount;
+        }, 0);
+      }
     } else {
       // In individual mode, show only current user's predictions
       const saved = localStorage.getItem(`predictions_${user.id}`);

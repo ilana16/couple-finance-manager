@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Calendar, Save, RefreshCw } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Calendar, Save, RefreshCw, Download } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 
 interface CategoryPrediction {
@@ -19,6 +19,7 @@ interface Predictions {
 
 export default function PredictionsPage() {
   const { user } = useAuth();
+  const [viewMode, setViewMode] = useState<'individual' | 'joint'>('joint');
   const [predictions, setPredictions] = useState<Predictions>({
     income: [],
     expenses: [],
@@ -32,17 +33,49 @@ export default function PredictionsPage() {
   // Load predictions from localStorage
   useEffect(() => {
     if (!user) return;
-    const saved = localStorage.getItem(`predictions_${user.id}`);
-    if (saved) {
-      setPredictions(JSON.parse(saved));
+    
+    if (viewMode === 'joint') {
+      // In joint mode, load shared joint predictions
+      const jointData = localStorage.getItem('predictions_joint');
+      if (jointData) {
+        setPredictions(JSON.parse(jointData));
+      } else {
+        // Initialize empty joint predictions if none exist
+        setPredictions({
+          income: [],
+          expenses: [],
+          startDate: new Date().toISOString().split('T')[0],
+          endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        });
+      }
+    } else {
+      // In individual mode, load only current user's predictions
+      const saved = localStorage.getItem(`predictions_${user.id}`);
+      if (saved) {
+        setPredictions(JSON.parse(saved));
+      } else {
+        setPredictions({
+          income: [],
+          expenses: [],
+          startDate: new Date().toISOString().split('T')[0],
+          endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        });
+      }
     }
-  }, [user]);
+  }, [user, viewMode]);
 
   // Save predictions to localStorage
   const savePredictions = () => {
     if (!user) return;
-    localStorage.setItem(`predictions_${user.id}`, JSON.stringify(predictions));
-    alert('Predictions saved successfully!');
+    if (viewMode === 'joint') {
+      // In joint mode, save to shared joint predictions
+      localStorage.setItem('predictions_joint', JSON.stringify(predictions));
+      alert('Joint predictions saved successfully! Both partners can see these changes.');
+    } else {
+      // In individual mode, save to user-specific predictions
+      localStorage.setItem(`predictions_${user.id}`, JSON.stringify(predictions));
+      alert('Predictions saved successfully!');
+    }
   };
 
   // Add income category
@@ -79,6 +112,49 @@ export default function PredictionsPage() {
     });
   };
 
+  // Copy from Joint predictions
+  const copyFromJoint = () => {
+    if (viewMode === 'joint') {
+      alert('Already in Joint mode. Switch to Individual mode to copy from Joint.');
+      return;
+    }
+
+    const jointData = localStorage.getItem('predictions_joint');
+    if (!jointData) {
+      alert('No joint predictions found. Please create joint predictions first.');
+      return;
+    }
+
+    const jointPredictions = JSON.parse(jointData);
+    const jointIncome = jointPredictions.income || [];
+    const jointExpenses = jointPredictions.expenses || [];
+
+    if (jointIncome.length === 0 && jointExpenses.length === 0) {
+      alert('Joint predictions are empty. Nothing to copy.');
+      return;
+    }
+
+    // Check for duplicates and merge
+    const existingIncomeCategories = new Set(predictions.income.map(i => i.category));
+    const existingExpenseCategories = new Set(predictions.expenses.map(e => e.category));
+
+    const newIncome = jointIncome.filter((item: CategoryPrediction) => !existingIncomeCategories.has(item.category));
+    const newExpenses = jointExpenses.filter((item: CategoryPrediction) => !existingExpenseCategories.has(item.category));
+
+    if (newIncome.length === 0 && newExpenses.length === 0) {
+      alert('All joint predictions already exist in your individual predictions. No new items to copy.');
+      return;
+    }
+
+    setPredictions({
+      ...predictions,
+      income: [...predictions.income, ...newIncome],
+      expenses: [...predictions.expenses, ...newExpenses],
+    });
+
+    alert(`Copied ${newIncome.length} income and ${newExpenses.length} expense predictions from Joint. Remember to save!`);
+  };
+
   // Calculate monthly equivalent
   const toMonthly = (amount: number, frequency: string) => {
     if (frequency === 'weekly') return amount * 4.33;
@@ -105,12 +181,55 @@ export default function PredictionsPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Financial Predictions</h1>
-        <p className="text-gray-600 mt-2">
-          Forecast your future income and expenses by category
-        </p>
+      <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Financial Predictions</h1>
+          <p className="text-gray-600 mt-2">
+            Forecast your future income and expenses by category
+          </p>
+        </div>
+        
+        {/* View Mode Toggle */}
+        <div className="flex bg-gray-100 rounded-lg p-1">
+          <button
+            onClick={() => setViewMode('individual')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              viewMode === 'individual'
+                ? 'bg-white text-blue-600 shadow'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Individual
+          </button>
+          <button
+            onClick={() => setViewMode('joint')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              viewMode === 'joint'
+                ? 'bg-white text-blue-600 shadow'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Joint
+          </button>
+        </div>
       </div>
+      
+      {/* Info banner for Joint mode */}
+      {viewMode === 'joint' && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+            <div>
+              <p className="text-sm font-medium text-blue-900">Joint Predictions (Default)</p>
+              <p className="text-sm text-blue-700 mt-1">
+                Managing shared predictions for both partners. Changes are visible to both accounts. Switch to Individual mode for personal predictions.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Date Range */}
       <div className="bg-white rounded-lg shadow p-6 mb-6">
@@ -284,7 +403,7 @@ export default function PredictionsPage() {
       </div>
 
       {/* Save Button */}
-      <div className="flex justify-center gap-4">
+      <div className="flex justify-center gap-4 flex-wrap">
         <button
           onClick={savePredictions}
           className="px-6 py-3 bg-blue-500 text-white rounded-md hover:bg-blue-600 flex items-center gap-2"
@@ -292,6 +411,15 @@ export default function PredictionsPage() {
           <Save className="w-5 h-5" />
           Save Predictions
         </button>
+        {viewMode === 'individual' && (
+          <button
+            onClick={copyFromJoint}
+            className="px-6 py-3 bg-purple-500 text-white rounded-md hover:bg-purple-600 flex items-center gap-2"
+          >
+            <Download className="w-5 h-5" />
+            Copy from Joint
+          </button>
+        )}
         <button
           onClick={() => {
             if (confirm('Reset all predictions?')) {
