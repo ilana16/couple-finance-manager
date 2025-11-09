@@ -3,6 +3,7 @@ import { Edit2, Trash2 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { budgetStorage, transactionStorage, createTimestamp } from '../lib/storage-firestore';
 import { predictionsStorage } from '../lib/predictions-storage';
+import { categoriesStorage } from '../lib/categories-storage';
 import { BudgetPeriodType } from '../lib/enhanced-schema';
 import {
   convertBudgetAmount,
@@ -36,14 +37,16 @@ function NewBudgetModal({ onClose }: { onClose: () => void }) {
   });
 
   useEffect(() => {
-    // Load expense categories from Settings
-    const stored = localStorage.getItem('couple_fin_expense_categories');
-    if (stored) {
-      setExpenseCategories(JSON.parse(stored));
-    } else {
-      // Default categories if none exist
-      setExpenseCategories(['Food', 'Transportation', 'Housing', 'Utilities', 'Entertainment', 'Healthcare', 'Other']);
-    }
+    const loadCategories = async () => {
+      try {
+        const categoriesData = await categoriesStorage.getCategories();
+        setExpenseCategories(categoriesData?.expenseCategories || ['Food', 'Transportation', 'Housing', 'Utilities', 'Entertainment', 'Healthcare', 'Other']);
+      } catch (error) {
+        console.error('Error loading categories:', error);
+        setExpenseCategories(['Food', 'Transportation', 'Housing', 'Utilities', 'Entertainment', 'Healthcare', 'Other']);
+      }
+    };
+    loadCategories();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {

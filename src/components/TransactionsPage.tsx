@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/auth';
 import { transactionStorage, accountStorage, creditStorage, Transaction, Account, CreditSource, createTimestamp } from '../lib/storage-firestore';
+import { categoriesStorage } from '../lib/categories-storage';
 import { Plus, Search, Filter, Edit2, Trash2, Download, Upload } from 'lucide-react';
 
 export default function TransactionsPage() {
@@ -285,6 +286,8 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
   const { user, viewMode } = useAuth();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [creditSources, setCreditSources] = useState<CreditSource[]>([]);
+  const [expenseCategories, setExpenseCategories] = useState<string[]>([]);
+  const [incomeCategories, setIncomeCategories] = useState<string[]>([]);
   
   const [formData, setFormData] = useState({
     date: transaction?.date ? new Date(transaction.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
@@ -310,22 +313,23 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
       if (!user) return;
       try {
         const includeJoint = viewMode === 'joint';
-        const [accountsData, creditsData] = await Promise.all([
+        const [accountsData, creditsData, categoriesData] = await Promise.all([
           accountStorage.getByUser(user.id, includeJoint),
-          creditStorage.getByUser(user.id, includeJoint)
+          creditStorage.getByUser(user.id, includeJoint),
+          categoriesStorage.getCategories()
         ]);
         setAccounts(accountsData);
         setCreditSources(creditsData);
+        setExpenseCategories(categoriesData?.expenseCategories || []);
+        setIncomeCategories(categoriesData?.incomeCategories || []);
       } catch (error) {
-        console.error('Error loading accounts/credits:', error);
+        console.error('Error loading accounts/credits/categories:', error);
       }
     };
     loadAccountsAndCredits();
   }, [user, viewMode]);
 
-  // Get categories from Settings based on transaction type
-  const expenseCategories = JSON.parse(localStorage.getItem('couple_fin_expense_categories') || '[]');
-  const incomeCategories = JSON.parse(localStorage.getItem('couple_fin_income_categories') || '[]');
+  // Get categories based on transaction type
   const categories = formData.type === 'income' ? incomeCategories : expenseCategories;
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Calendar, Save, RefreshCw, Download } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { predictionsStorage, PredictionItem } from '../lib/predictions-storage';
+import { categoriesStorage } from '../lib/categories-storage';
 
 interface CategoryPrediction {
   category: string;
@@ -564,11 +565,21 @@ function CategoryFormModal({
     frequency: 'monthly',
     notes: '',
   });
+  const [categories, setCategories] = useState<string[]>([]);
 
-  // Get categories from Settings
-  const categories = type === 'income' 
-    ? JSON.parse(localStorage.getItem('couple_fin_income_categories') || '[]')
-    : JSON.parse(localStorage.getItem('couple_fin_expense_categories') || '[]');
+  // Load categories from Firestore
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const categoriesData = await categoriesStorage.getCategories();
+        setCategories(type === 'income' ? (categoriesData?.incomeCategories || []) : (categoriesData?.expenseCategories || []));
+      } catch (error) {
+        console.error('Error loading categories:', error);
+        setCategories([]);
+      }
+    };
+    loadCategories();
+  }, [type]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
