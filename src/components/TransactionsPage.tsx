@@ -363,6 +363,8 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
       updatedAt: createTimestamp(),
     };
 
+    console.log('Submitting transaction with data:', data);
+    
     try {
       if (transaction) {
         await transactionStorage.update(transaction.id, data);
@@ -378,10 +380,14 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
           }
         }
       } else {
+        console.log('Creating new transaction...');
         await transactionStorage.create(data);
+        console.log('Transaction created successfully');
         
         // Update savings goal if selected
+        console.log('Checking savings goal:', formData.savingsGoalId);
         if (formData.savingsGoalId) {
+          console.log('Updating savings goal...');
           const goal = savingsGoals.find(g => g.id === formData.savingsGoalId);
           if (goal) {
             await goalStorage.update(formData.savingsGoalId, {
@@ -392,7 +398,9 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
         }
         
         // Update account or credit balance
+        console.log('Updating account/credit balance...');
         if (formData.paymentMethod === 'debit' && formData.accountId) {
+          console.log('Updating account balance...');
           const account = accounts.find(a => a.id === formData.accountId);
           if (account) {
             const newBalance = formData.type === 'income' 
