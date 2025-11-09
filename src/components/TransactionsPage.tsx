@@ -341,7 +341,8 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
     e.preventDefault();
     if (!user) return;
 
-    const data = {
+    // Build transaction data, excluding undefined values (Firestore doesn't allow them)
+    const data: any = {
       userId: user.id,
       date: new Date(formData.date).toISOString(),
       description: formData.description,
@@ -349,20 +350,36 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
       category: formData.category,
       type: formData.type,
       paymentMethod: formData.paymentMethod,
-      accountId: formData.paymentMethod === 'debit' ? formData.accountId : undefined,
-      creditSourceId: formData.paymentMethod === 'credit' ? formData.creditSourceId : undefined,
       isRecurring: formData.isRecurring,
-      recurringFrequency: formData.isRecurring ? formData.recurringFrequency : undefined,
-      customRecurringValue: formData.isRecurring && formData.recurringFrequency === 'custom' ? formData.customRecurringValue : undefined,
-      customRecurringUnit: formData.isRecurring && formData.recurringFrequency === 'custom' ? formData.customRecurringUnit : undefined,
-      dayOfMonth: formData.isRecurring && formData.recurringFrequency === 'monthly' ? formData.dayOfMonth : undefined,
-      recurringEndDate: formData.isRecurring && formData.recurringEndDate ? new Date(formData.recurringEndDate).toISOString() : undefined,
       isJoint: formData.isJoint,
       notes: formData.notes,
-      savingsGoalId: formData.savingsGoalId ? formData.savingsGoalId : undefined,
       createdAt: transaction?.createdAt || createTimestamp(),
       updatedAt: createTimestamp(),
     };
+
+    // Add optional fields only if they have values
+    if (formData.paymentMethod === 'debit' && formData.accountId) {
+      data.accountId = formData.accountId;
+    }
+    if (formData.paymentMethod === 'credit' && formData.creditSourceId) {
+      data.creditSourceId = formData.creditSourceId;
+    }
+    if (formData.isRecurring && formData.recurringFrequency) {
+      data.recurringFrequency = formData.recurringFrequency;
+    }
+    if (formData.isRecurring && formData.recurringFrequency === 'custom') {
+      data.customRecurringValue = formData.customRecurringValue;
+      data.customRecurringUnit = formData.customRecurringUnit;
+    }
+    if (formData.isRecurring && formData.recurringFrequency === 'monthly' && formData.dayOfMonth) {
+      data.dayOfMonth = formData.dayOfMonth;
+    }
+    if (formData.isRecurring && formData.recurringEndDate) {
+      data.recurringEndDate = new Date(formData.recurringEndDate).toISOString();
+    }
+    if (formData.savingsGoalId) {
+      data.savingsGoalId = formData.savingsGoalId;
+    }
 
     console.log('Submitting transaction with data:', data);
     
