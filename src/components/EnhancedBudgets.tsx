@@ -303,39 +303,60 @@ export default function EnhancedBudgets() {
 
   const handleImportFromPredictions = () => {
     if (!user) return;
-    const saved = localStorage.getItem(`predictions_${user.id}`);
-    if (!saved) {
-      alert('No predictions found. Please add predictions first.');
-      return;
+    
+    let allExpensePredictions: any[] = [];
+    
+    if (viewMode === 'joint') {
+      // In joint mode, import from both partners
+      const user1Data = localStorage.getItem('predictions_user1');
+      const user2Data = localStorage.getItem('predictions_user2');
+      
+      [user1Data, user2Data].forEach(data => {
+        if (data) {
+          const predictions = JSON.parse(data);
+          const expenses = predictions.expenses || [];
+          allExpensePredictions.push(...expenses);
+        }
+      });
+    } else {
+      // In individual mode, import only from current user
+      const saved = localStorage.getItem(`predictions_${user.id}`);
+      if (saved) {
+        const predictions = JSON.parse(saved);
+        allExpensePredictions = predictions.expenses || [];
+      }
     }
     
-    const predictions = JSON.parse(saved);
-    const expensePredictions = predictions.expenses || [];
-    
-    if (expensePredictions.length === 0) {
+    if (allExpensePredictions.length === 0) {
       alert('No expense predictions found. Please add expense predictions first.');
       return;
     }
     
-    let importedCount = 0;
-    expensePredictions.forEach((pred: any) => {
-      // Check if budget already exists for this category
-      const existingBudget = budgets.find(b => b.category === pred.category);
-      if (existingBudget) {
-        return; // Skip if budget already exists
-      }
-      
-      // Convert prediction amount to monthly
+    // Group predictions by category and sum amounts if duplicates exist
+    const categoryMap = new Map<string, number>();
+    allExpensePredictions.forEach((pred: any) => {
       let monthlyAmount = pred.amount;
       if (pred.frequency === 'weekly') monthlyAmount = pred.amount * 4.33;
       if (pred.frequency === 'yearly') monthlyAmount = pred.amount / 12;
+      
+      const existing = categoryMap.get(pred.category) || 0;
+      categoryMap.set(pred.category, existing + monthlyAmount);
+    });
+    
+    let importedCount = 0;
+    categoryMap.forEach((monthlyAmount, category) => {
+      // Check if budget already exists for this category
+      const existingBudget = budgets.find(b => b.category === category);
+      if (existingBudget) {
+        return; // Skip if budget already exists
+      }
       
       const weeklyAmount = monthlyAmount / 4.33;
       const yearlyAmount = monthlyAmount * 12;
       
       // Create new budget from prediction
       budgetStorage.create({
-        category: pred.category,
+        category,
         monthlyAmount,
         weeklyAmount,
         yearlyAmount,
@@ -355,19 +376,42 @@ export default function EnhancedBudgets() {
   // Calculate total income from Predictions page
   const calculateTotalIncome = () => {
     if (!user) return 0;
-    const saved = localStorage.getItem(`predictions_${user.id}`);
-    if (!saved) return 0;
     
-    const predictions = JSON.parse(saved);
-    const incomePredictions = predictions.income || [];
+    let monthlyIncome = 0;
     
-    // Convert all income to monthly, then to selected period
-    const monthlyIncome = incomePredictions.reduce((sum: number, pred: any) => {
-      let monthlyAmount = pred.amount;
-      if (pred.frequency === 'weekly') monthlyAmount = pred.amount * 4.33;
-      if (pred.frequency === 'yearly') monthlyAmount = pred.amount / 12;
-      return sum + monthlyAmount;
-    }, 0);
+    if (viewMode === 'joint') {
+      // In joint mode, combine predictions from both partners
+      const user1Data = localStorage.getItem('predictions_user1');
+      const user2Data = localStorage.getItem('predictions_user2');
+      
+      [user1Data, user2Data].forEach(data => {
+        if (data) {
+          const predictions = JSON.parse(data);
+          const incomePredictions = predictions.income || [];
+          
+          monthlyIncome += incomePredictions.reduce((sum: number, pred: any) => {
+            let amount = pred.amount;
+            if (pred.frequency === 'weekly') amount = pred.amount * 4.33;
+            if (pred.frequency === 'yearly') amount = pred.amount / 12;
+            return sum + amount;
+          }, 0);
+        }
+      });
+    } else {
+      // In individual mode, show only current user's predictions
+      const saved = localStorage.getItem(`predictions_${user.id}`);
+      if (saved) {
+        const predictions = JSON.parse(saved);
+        const incomePredictions = predictions.income || [];
+        
+        monthlyIncome = incomePredictions.reduce((sum: number, pred: any) => {
+          let amount = pred.amount;
+          if (pred.frequency === 'weekly') amount = pred.amount * 4.33;
+          if (pred.frequency === 'yearly') amount = pred.amount / 12;
+          return sum + amount;
+        }, 0);
+      }
+    }
     
     // Convert to selected period
     if (selectedPeriod === 'weekly') return monthlyIncome / 4.33;
