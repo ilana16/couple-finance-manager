@@ -358,7 +358,7 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
       recurringEndDate: formData.isRecurring && formData.recurringEndDate ? new Date(formData.recurringEndDate).toISOString() : undefined,
       isJoint: formData.isJoint,
       notes: formData.notes,
-      savingsGoalId: formData.savingsGoalId || undefined,
+      savingsGoalId: formData.savingsGoalId ? formData.savingsGoalId : undefined,
       createdAt: transaction?.createdAt || createTimestamp(),
       updatedAt: createTimestamp(),
     };
@@ -411,7 +411,8 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
       onSave();
     } catch (error) {
       console.error('Error saving transaction:', error);
-      alert('Failed to save transaction. Please try again.');
+      console.error('Error details:', error instanceof Error ? error.message : error);
+      alert(`Failed to save transaction: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
     }
   };
 
