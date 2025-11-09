@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Calendar, Save, RefreshCw, Download } from 'lucide-react';
 import { useAuth } from '../lib/auth';
+import { predictionsStorage, PredictionItem } from '../lib/predictions-storage';
 
 interface CategoryPrediction {
   category: string;
@@ -29,52 +30,63 @@ export default function PredictionsPage() {
 
   const [showIncomeForm, setShowIncomeForm] = useState(false);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  // Load predictions from localStorage
+  // Load predictions from Firestore
   useEffect(() => {
-    if (!user) return;
-    
-    if (viewMode === 'joint') {
-      // In joint mode, load shared joint predictions
-      const jointData = localStorage.getItem('predictions_joint');
-      if (jointData) {
-        setPredictions(JSON.parse(jointData));
-      } else {
-        // Initialize empty joint predictions if none exist
-        setPredictions({
-          income: [],
-          expenses: [],
-          startDate: new Date().toISOString().split('T')[0],
-          endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        });
-      }
-    } else {
-      // In individual mode, load only current user's predictions
-      const saved = localStorage.getItem(`predictions_${user.id}`);
-      if (saved) {
-        setPredictions(JSON.parse(saved));
-      } else {
-        setPredictions({
-          income: [],
-          expenses: [],
-          startDate: new Date().toISOString().split('T')[0],
-          endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        });
-      }
-    }
+    loadPredictions();
   }, [user, viewMode]);
 
-  // Save predictions to localStorage
-  const savePredictions = () => {
+  const loadPredictions = async () => {
     if (!user) return;
-    if (viewMode === 'joint') {
-      // In joint mode, save to shared joint predictions
-      localStorage.setItem('predictions_joint', JSON.stringify(predictions));
-      alert('Joint predictions saved successfully! Both partners can see these changes.');
-    } else {
-      // In individual mode, save to user-specific predictions
-      localStorage.setItem(`predictions_${user.id}`, JSON.stringify(predictions));
-      alert('Predictions saved successfully!');
+    setLoading(true);
+    try {
+      const userId = viewMode === 'joint' ? 'joint' : user.id;
+      const data = await predictionsStorage.getByUserId(userId);
+      
+      if (data) {
+        setPredictions({
+          income: data.income,
+          expenses: data.expense,
+          startDate: new Date().toISOString().split('T')[0],
+          endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        });
+      } else {
+        // Initialize empty predictions
+        setPredictions({
+          income: [],
+          expenses: [],
+          startDate: new Date().toISOString().split('T')[0],
+          endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        });
+      }
+    } catch (error) {
+      console.error('Error loading predictions:', error);
+      alert('Failed to load predictions. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Save predictions to Firestore
+  const savePredictions = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const userId = viewMode === 'joint' ? 'joint' : user.id;
+      await predictionsStorage.savePredictions(userId, predictions.income, predictions.expenses);
+      
+      if (viewMode === 'joint') {
+        alert('Joint predictions saved successfully! Both partners can see these changes.');
+      } else {
+        alert('Predictions saved successfully!');
+      }
+    } catch (error) {
+      console.error('Error saving predictions:', error);
+      alert('Failed to save predictions. Please try again.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -112,22 +124,21 @@ export default function PredictionsPage() {
     });
   };
 
-  // Copy from Joint predictions
-  const copyFromJoint = () => {
+  // Copy from Joint predictions to Individual
+  const copyFromJoint = async () => {
     if (viewMode === 'joint') {
       alert('Already in Joint mode. Switch to Individual mode to copy from Joint.');
       return;
     }
 
-    const jointData = localStorage.getItem('predictions_joint');
+    const jointData = await predictionsStorage.getByUserId('joint');
     if (!jointData) {
       alert('No joint predictions found. Please create joint predictions first.');
       return;
     }
 
-    const jointPredictions = JSON.parse(jointData);
-    const jointIncome = jointPredictions.income || [];
-    const jointExpenses = jointPredictions.expenses || [];
+    const jointIncome = jointData.income || [];
+    const jointExpenses = jointData.expense || [];
 
     if (jointIncome.length === 0 && jointExpenses.length === 0) {
       alert('Joint predictions are empty. Nothing to copy.');
@@ -156,7 +167,7 @@ export default function PredictionsPage() {
   };
 
   // Copy from Individual predictions to Joint
-  const copyFromIndividual = () => {
+  const copyFromIndividual = async () => {
     if (viewMode === 'individual') {
       alert('Already in Individual mode. Switch to Joint mode to copy from Individual.');
       return;
@@ -164,15 +175,14 @@ export default function PredictionsPage() {
 
     if (!user) return;
 
-    const individualData = localStorage.getItem(`predictions_${user.id}`);
+    const individualData = await predictionsStorage.getByUserId(user.id);
     if (!individualData) {
       alert('No individual predictions found. Please create individual predictions first.');
       return;
     }
 
-    const individualPredictions = JSON.parse(individualData);
-    const individualIncome = individualPredictions.income || [];
-    const individualExpenses = individualPredictions.expenses || [];
+    const individualIncome = individualData.income || [];
+    const individualExpenses = individualData.expense || [];
 
     if (individualIncome.length === 0 && individualExpenses.length === 0) {
       alert('Individual predictions are empty. Nothing to copy.');
@@ -223,6 +233,19 @@ export default function PredictionsPage() {
   const yearlyIncome = totalMonthlyIncome * 12;
   const yearlyExpenses = totalMonthlyExpenses * 12;
   const yearlyBalance = yearlyIncome - yearlyExpenses;
+
+  if (loading) {
+    return (
+      <div className="p-4 md:p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading predictions...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
@@ -451,10 +474,22 @@ export default function PredictionsPage() {
       <div className="flex justify-center gap-4 flex-wrap">
         <button
           onClick={savePredictions}
-          className="px-6 py-3 bg-blue-500 text-white rounded-md hover:bg-blue-600 flex items-center gap-2"
+          disabled={saving}
+          className={`px-6 py-3 bg-blue-500 text-white rounded-md hover:bg-blue-600 flex items-center gap-2 ${
+            saving ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
         >
-          <Save className="w-5 h-5" />
-          Save Predictions
+          {saving ? (
+            <>
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+              Saving...
+            </>
+          ) : (
+            <>
+              <Save className="w-5 h-5" />
+              Save Predictions
+            </>
+          )}
         </button>
         {viewMode === 'individual' && (
           <button

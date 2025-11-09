@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, ProtectedRoute, useAuth } from '../lib/auth';
 import { transactionStorage, reminderStorage, accountStorage, creditStorage } from '../lib/storage-firestore';
+import { predictionsStorage } from '../lib/predictions-storage';
 import SidebarLayout from '../layouts/SidebarLayout';
 import EnhancedBudgets from './EnhancedBudgets';
 import { FinancialHealthPage } from './FinancialHealthWidget';
@@ -158,36 +159,19 @@ function DashboardPage() {
       return amount;
     };
     
-    if (viewMode === 'joint') {
-      // In joint mode, use shared joint predictions
-      const jointData = localStorage.getItem('predictions_joint');
-      if (jointData) {
-        const predictions = JSON.parse(jointData);
-        predictedIncome = predictions.income?.reduce(
-          (sum: number, item: any) => sum + toMonthly(item.amount, item.frequency),
-          0
-        ) || 0;
-        
-        predictedExpenses = predictions.expenses?.reduce(
-          (sum: number, item: any) => sum + toMonthly(item.amount, item.frequency),
-          0
-        ) || 0;
-      }
-    } else {
-      // In individual mode, show only current user's predictions
-      const predictionsData = localStorage.getItem(`predictions_${user.id}`);
-      if (predictionsData) {
-        const predictions = JSON.parse(predictionsData);
-        predictedIncome = predictions.income?.reduce(
-          (sum: number, item: any) => sum + toMonthly(item.amount, item.frequency),
-          0
-        ) || 0;
-        
-        predictedExpenses = predictions.expenses?.reduce(
-          (sum: number, item: any) => sum + toMonthly(item.amount, item.frequency),
-          0
-        ) || 0;
-      }
+    const userId = viewMode === 'joint' ? 'joint' : user.id;
+    const predictionsData = await predictionsStorage.getByUserId(userId);
+    
+    if (predictionsData) {
+      predictedIncome = predictionsData.income?.reduce(
+        (sum: number, item: any) => sum + toMonthly(item.amount, item.frequency),
+        0
+      ) || 0;
+      
+      predictedExpenses = predictionsData.expense?.reduce(
+        (sum: number, item: any) => sum + toMonthly(item.amount, item.frequency),
+        0
+      ) || 0;
     }
 
       setStats({

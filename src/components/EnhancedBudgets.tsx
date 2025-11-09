@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Edit2, Trash2 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { budgetStorage, transactionStorage, createTimestamp } from '../lib/storage-firestore';
+import { predictionsStorage } from '../lib/predictions-storage';
 import { BudgetPeriodType } from '../lib/enhanced-schema';
 import {
   convertBudgetAmount,
@@ -260,10 +261,35 @@ export default function EnhancedBudgets() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [showImportFromPredictions, setShowImportFromPredictions] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [predictedMonthlyIncome, setPredictedMonthlyIncome] = useState(0);
 
   useEffect(() => {
     loadBudgets();
+    loadPredictedIncome();
   }, [user, viewMode]);
+
+  const loadPredictedIncome = async () => {
+    if (!user) return;
+    try {
+      const userId = viewMode === 'joint' ? 'joint' : user.id;
+      const predictionsData = await predictionsStorage.getByUserId(userId);
+      
+      if (predictionsData) {
+        const monthlyIncome = predictionsData.income.reduce((sum: number, pred: any) => {
+          let amount = pred.amount;
+          if (pred.frequency === 'weekly') amount = pred.amount * 4.33;
+          if (pred.frequency === 'yearly') amount = pred.amount / 12;
+          return sum + amount;
+        }, 0);
+        setPredictedMonthlyIncome(monthlyIncome);
+      } else {
+        setPredictedMonthlyIncome(0);
+      }
+    } catch (error) {
+      console.error('Error loading predicted income:', error);
+      setPredictedMonthlyIncome(0);
+    }
+  };
 
   const loadBudgets = async () => {
     if (!user) return;
@@ -329,20 +355,11 @@ export default function EnhancedBudgets() {
     
     let allExpensePredictions: any[] = [];
     
-    if (viewMode === 'joint') {
-      // In joint mode, import from shared joint predictions
-      const jointData = localStorage.getItem('predictions_joint');
-      if (jointData) {
-        const predictions = JSON.parse(jointData);
-        allExpensePredictions = predictions.expenses || [];
-      }
-    } else {
-      // In individual mode, import only from current user
-      const saved = localStorage.getItem(`predictions_${user.id}`);
-      if (saved) {
-        const predictions = JSON.parse(saved);
-        allExpensePredictions = predictions.expenses || [];
-      }
+    const userId = viewMode === 'joint' ? 'joint' : user.id;
+    const predictionsData = await predictionsStorage.getByUserId(userId);
+    
+    if (predictionsData) {
+      allExpensePredictions = predictionsData.expense || [];
     }
     
     if (allExpensePredictions.length === 0) {
@@ -410,44 +427,10 @@ export default function EnhancedBudgets() {
 
   // Calculate total income from Predictions page
   const calculateTotalIncome = () => {
-    if (!user) return 0;
-    
-    let monthlyIncome = 0;
-    
-    if (viewMode === 'joint') {
-      // In joint mode, use shared joint predictions
-      const jointData = localStorage.getItem('predictions_joint');
-      if (jointData) {
-        const predictions = JSON.parse(jointData);
-        const incomePredictions = predictions.income || [];
-        
-        monthlyIncome = incomePredictions.reduce((sum: number, pred: any) => {
-          let amount = pred.amount;
-          if (pred.frequency === 'weekly') amount = pred.amount * 4.33;
-          if (pred.frequency === 'yearly') amount = pred.amount / 12;
-          return sum + amount;
-        }, 0);
-      }
-    } else {
-      // In individual mode, show only current user's predictions
-      const saved = localStorage.getItem(`predictions_${user.id}`);
-      if (saved) {
-        const predictions = JSON.parse(saved);
-        const incomePredictions = predictions.income || [];
-        
-        monthlyIncome = incomePredictions.reduce((sum: number, pred: any) => {
-          let amount = pred.amount;
-          if (pred.frequency === 'weekly') amount = pred.amount * 4.33;
-          if (pred.frequency === 'yearly') amount = pred.amount / 12;
-          return sum + amount;
-        }, 0);
-      }
-    }
-    
     // Convert to selected period
-    if (selectedPeriod === 'weekly') return monthlyIncome / 4.33;
-    if (selectedPeriod === 'yearly') return monthlyIncome * 12;
-    return monthlyIncome;
+    if (selectedPeriod === 'weekly') return predictedMonthlyIncome / 4.33;
+    if (selectedPeriod === 'yearly') return predictedMonthlyIncome * 12;
+    return predictedMonthlyIncome;
   };
   
   const totalIncome = calculateTotalIncome();
