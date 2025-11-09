@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Edit2, Trash2 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
-import { budgetStorage, transactionStorage } from '../lib/storage';
+import { budgetStorage, transactionStorage, createTimestamp } from '../lib/storage-firestore';
 import { BudgetPeriodType } from '../lib/enhanced-schema';
 import {
   convertBudgetAmount,
@@ -45,24 +45,30 @@ function NewBudgetModal({ onClose }: { onClose: () => void }) {
     }
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
     const weeklyAmount = formData.monthlyAmount / 4.33;
     const yearlyAmount = formData.monthlyAmount * 12;
 
-    budgetStorage.create({
-      userId: user.id,
-      category: formData.category,
-      monthlyAmount: formData.monthlyAmount,
-      weeklyAmount,
-      yearlyAmount,
-      spent: 0, // Will be calculated from transactions
-      isJoint: formData.isJoint,
-    });
-
-    onClose();
+    try {
+      await budgetStorage.create({
+        userId: user.id,
+        category: formData.category,
+        monthlyAmount: formData.monthlyAmount,
+        weeklyAmount,
+        yearlyAmount,
+        spent: 0, // Will be calculated from transactions
+        isJoint: formData.isJoint,
+        createdAt: createTimestamp(),
+        updatedAt: createTimestamp(),
+      });
+      onClose();
+    } catch (error) {
+      console.error('Error creating budget:', error);
+      alert('Failed to create budget. Please try again.');
+    }
   };
 
   return (
@@ -253,47 +259,64 @@ export default function EnhancedBudgets() {
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [showImportFromPredictions, setShowImportFromPredictions] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadBudgets();
   }, [user, viewMode]);
 
-  const loadBudgets = () => {
+  const loadBudgets = async () => {
     if (!user) return;
-    const includeJoint = viewMode === 'joint';
-    const storageBudgets = budgetStorage.getByUser(user.id, includeJoint);
+    setLoading(true);
     
-    // Get all transactions to calculate spent amounts
-    const allTransactions = transactionStorage.getByUser(user.id, includeJoint);
-    
-    const convertedBudgets: Budget[] = storageBudgets.map(b => {
-      // Calculate spent from transactions matching this category
-      const categoryTransactions = allTransactions.filter(
-        t => t.category === b.category && t.type === 'expense'
-      );
+    try {
+      const includeJoint = viewMode === 'joint';
       
-      // Sum up all expense transactions in this category
-      const calculatedSpent = categoryTransactions.reduce((sum, t) => sum + t.amount, 0);
+      // Load budgets and transactions in parallel
+      const [storageBudgets, allTransactions] = await Promise.all([
+        budgetStorage.getByUser(user.id, includeJoint),
+        transactionStorage.getByUser(user.id, includeJoint)
+      ]);
       
-      return {
-        id: b.id,
-        name: b.category,
-        category: b.category,
-        monthlyAmount: b.monthlyAmount,
-        weeklyAmount: b.weeklyAmount,
-        yearlyAmount: b.yearlyAmount,
-        spent: calculatedSpent, // Auto-calculated from transactions
-        isJoint: b.isJoint,
-      };
-    });
-    
-    setBudgets(convertedBudgets);
+      const convertedBudgets: Budget[] = storageBudgets.map(b => {
+        // Calculate spent from transactions matching this category
+        const categoryTransactions = allTransactions.filter(
+          t => t.category === b.category && t.type === 'expense'
+        );
+        
+        // Sum up all expense transactions in this category
+        const calculatedSpent = categoryTransactions.reduce((sum, t) => sum + t.amount, 0);
+        
+        return {
+          id: b.id,
+          name: b.category,
+          category: b.category,
+          monthlyAmount: b.monthlyAmount,
+          weeklyAmount: b.weeklyAmount,
+          yearlyAmount: b.yearlyAmount,
+          spent: calculatedSpent, // Auto-calculated from transactions
+          isJoint: b.isJoint,
+        };
+      });
+      
+      setBudgets(convertedBudgets);
+    } catch (error) {
+      console.error('Error loading budgets:', error);
+      alert('Failed to load budgets. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     if (confirm(`Are you sure you want to delete "${name}"?`)) {
-      budgetStorage.delete(id);
-      loadBudgets();
+      try {
+        await budgetStorage.delete(id);
+        await loadBudgets();
+      } catch (error) {
+        console.error('Error deleting budget:', error);
+        alert('Failed to delete budget. Please try again.');
+      }
     }
   };
 
@@ -301,7 +324,7 @@ export default function EnhancedBudgets() {
     setEditingBudget(budget);
   };
 
-  const handleImportFromPredictions = () => {
+  const handleImportFromPredictions = async () => {
     if (!user) return;
     
     let allExpensePredictions: any[] = [];
@@ -350,22 +373,39 @@ export default function EnhancedBudgets() {
       const yearlyAmount = monthlyAmount * 12;
       
       // Create new budget from prediction
-      budgetStorage.create({
-        category,
-        monthlyAmount,
-        weeklyAmount,
-        yearlyAmount,
-        spent: 0,
-        isJoint: viewMode === 'joint',
-        userId: user.id,
-      });
-      
       importedCount++;
     });
     
-    loadBudgets();
-    setShowImportFromPredictions(false);
-    alert(`Successfully imported ${importedCount} budget(s) from predictions!`);
+    try {
+      // Create all budgets
+      const promises: Promise<any>[] = [];
+      categoryMap.forEach((monthlyAmount, category) => {
+        const existingBudget = budgets.find(b => b.category === category);
+        if (!existingBudget) {
+          const weeklyAmount = monthlyAmount / 4.33;
+          const yearlyAmount = monthlyAmount * 12;
+          promises.push(budgetStorage.create({
+            category,
+            monthlyAmount,
+            weeklyAmount,
+            yearlyAmount,
+            spent: 0,
+            isJoint: viewMode === 'joint',
+            userId: user.id,
+            createdAt: createTimestamp(),
+            updatedAt: createTimestamp(),
+          }));
+        }
+      });
+      
+      await Promise.all(promises);
+      await loadBudgets();
+      setShowImportFromPredictions(false);
+      alert(`Successfully imported ${importedCount} budget(s) from predictions!`);
+    } catch (error) {
+      console.error('Error importing budgets:', error);
+      alert('Failed to import budgets. Please try again.');
+    }
   };
 
   // Calculate total income from Predictions page
@@ -426,6 +466,19 @@ export default function EnhancedBudgets() {
   }, 0);
   
   const { whatsLeft, isDeficit, percentageUsed } = calculateWhatsLeft(totalIncome, totalSpent, startingBalance);
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading budgets...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">

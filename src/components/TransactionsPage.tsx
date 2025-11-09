@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/auth';
-import { transactionStorage, accountStorage, creditStorage, Transaction, Account, CreditSource } from '../lib/storage';
+import { transactionStorage, accountStorage, creditStorage, Transaction, Account, CreditSource, createTimestamp } from '../lib/storage-firestore';
 import { Plus, Search, Filter, Edit2, Trash2, Download, Upload } from 'lucide-react';
 
 export default function TransactionsPage() {
@@ -12,6 +12,7 @@ export default function TransactionsPage() {
   const [filterCategory, setFilterCategory] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadTransactions();
@@ -21,11 +22,19 @@ export default function TransactionsPage() {
     filterTransactions();
   }, [transactions, searchTerm, filterType, filterCategory]);
 
-  const loadTransactions = () => {
+  const loadTransactions = async () => {
     if (!user) return;
-    const includeJoint = viewMode === 'joint';
-    const data = transactionStorage.getByUser(user.id, includeJoint);
-    setTransactions(data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    setLoading(true);
+    try {
+      const includeJoint = viewMode === 'joint';
+      const data = await transactionStorage.getByUser(user.id, includeJoint);
+      setTransactions(data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+      alert('Failed to load transactions. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filterTransactions = () => {
@@ -49,10 +58,15 @@ export default function TransactionsPage() {
     setFilteredTransactions(filtered);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this transaction?')) {
-      transactionStorage.delete(id);
-      loadTransactions();
+      try {
+        await transactionStorage.delete(id);
+        await loadTransactions();
+      } catch (error) {
+        console.error('Error deleting transaction:', error);
+        alert('Failed to delete transaction. Please try again.');
+      }
     }
   };
 
@@ -67,6 +81,19 @@ export default function TransactionsPage() {
     .reduce((sum, t) => sum + t.amount, 0);
 
   const netAmount = totalIncome - totalExpenses;
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading transactions...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -279,10 +306,21 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
   });
 
   useEffect(() => {
-    if (!user) return;
-    const includeJoint = viewMode === 'joint';
-    setAccounts(accountStorage.getByUser(user.id, includeJoint));
-    setCreditSources(creditStorage.getByUser(user.id, includeJoint));
+    const loadAccountsAndCredits = async () => {
+      if (!user) return;
+      try {
+        const includeJoint = viewMode === 'joint';
+        const [accountsData, creditsData] = await Promise.all([
+          accountStorage.getByUser(user.id, includeJoint),
+          creditStorage.getByUser(user.id, includeJoint)
+        ]);
+        setAccounts(accountsData);
+        setCreditSources(creditsData);
+      } catch (error) {
+        console.error('Error loading accounts/credits:', error);
+      }
+    };
+    loadAccountsAndCredits();
   }, [user, viewMode]);
 
   // Get categories from Settings based on transaction type
@@ -290,13 +328,13 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
   const incomeCategories = JSON.parse(localStorage.getItem('couple_fin_income_categories') || '[]');
   const categories = formData.type === 'income' ? incomeCategories : expenseCategories;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
     const data = {
       userId: user.id,
-      date: new Date(formData.date),
+      date: new Date(formData.date).toISOString(),
       description: formData.description,
       amount: parseFloat(formData.amount),
       category: formData.category,
@@ -309,25 +347,41 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
       customRecurringValue: formData.isRecurring && formData.recurringFrequency === 'custom' ? formData.customRecurringValue : undefined,
       customRecurringUnit: formData.isRecurring && formData.recurringFrequency === 'custom' ? formData.customRecurringUnit : undefined,
       dayOfMonth: formData.isRecurring && formData.recurringFrequency === 'monthly' ? formData.dayOfMonth : undefined,
-      recurringEndDate: formData.isRecurring && formData.recurringEndDate ? new Date(formData.recurringEndDate) : undefined,
+      recurringEndDate: formData.isRecurring && formData.recurringEndDate ? new Date(formData.recurringEndDate).toISOString() : undefined,
       isJoint: formData.isJoint,
       notes: formData.notes,
+      createdAt: transaction?.createdAt || createTimestamp(),
+      updatedAt: createTimestamp(),
     };
 
-    if (transaction) {
-      transactionStorage.update(transaction.id, data);
-    } else {
-      const newTransaction = transactionStorage.create(data);
-      
-      // Update account or credit balance
-      if (formData.paymentMethod === 'debit' && formData.accountId) {
-        accountStorage.updateBalance(formData.accountId, parseFloat(formData.amount), formData.type === 'income');
-      } else if (formData.paymentMethod === 'credit' && formData.creditSourceId) {
-        creditStorage.updateBalance(formData.creditSourceId, parseFloat(formData.amount), false);
+    try {
+      if (transaction) {
+        await transactionStorage.update(transaction.id, data);
+      } else {
+        await transactionStorage.create(data);
+        
+        // Update account or credit balance
+        if (formData.paymentMethod === 'debit' && formData.accountId) {
+          const account = accounts.find(a => a.id === formData.accountId);
+          if (account) {
+            const newBalance = formData.type === 'income' 
+              ? account.balance + parseFloat(formData.amount)
+              : account.balance - parseFloat(formData.amount);
+            await accountStorage.update(formData.accountId, { balance: newBalance, updatedAt: createTimestamp() });
+          }
+        } else if (formData.paymentMethod === 'credit' && formData.creditSourceId) {
+          const credit = creditSources.find(c => c.id === formData.creditSourceId);
+          if (credit) {
+            const newBalance = credit.currentBalance + parseFloat(formData.amount);
+            await creditStorage.update(formData.creditSourceId, { currentBalance: newBalance, updatedAt: createTimestamp() });
+          }
+        }
       }
+      onSave();
+    } catch (error) {
+      console.error('Error saving transaction:', error);
+      alert('Failed to save transaction. Please try again.');
     }
-
-    onSave();
   };
 
   return (
@@ -471,7 +525,7 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
                 <option value="">Select a credit source</option>
                 {creditSources.map(credit => (
                   <option key={credit.id} value={credit.id}>
-                    {credit.name} - Available: ₪{credit.availableCredit.toFixed(2)}
+                    {credit.name} - Available: ₪{(credit.creditLimit - credit.currentBalance).toFixed(2)}
                   </option>
                 ))}
               </select>

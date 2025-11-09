@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, ProtectedRoute, useAuth } from '../lib/auth';
-import { transactionStorage, reminderStorage, accountStorage, creditStorage } from '../lib/storage';
+import { transactionStorage, reminderStorage, accountStorage, creditStorage } from '../lib/storage-firestore';
 import SidebarLayout from '../layouts/SidebarLayout';
 import EnhancedBudgets from './EnhancedBudgets';
 import { FinancialHealthPage } from './FinancialHealthWidget';
@@ -92,31 +92,36 @@ function DashboardPage() {
   });
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [upcomingReminders, setUpcomingReminders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) return;
     loadDashboardData();
   }, [user, viewMode]);
 
-  const loadDashboardData = () => {
+  const loadDashboardData = async () => {
     if (!user) return;
-    const includeJoint = viewMode === 'joint';
+    setLoading(true);
+    
+    try {
+      const includeJoint = viewMode === 'joint';
 
-    // Load accounts
-    const accounts = accountStorage.getByUser(user.id, includeJoint);
-    const totalAccountBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0);
-    
-    // Load credit sources
-    const credits = creditStorage.getByUser(user.id, includeJoint);
-    const totalCreditBalance = credits.reduce((sum, c) => sum + c.currentBalance, 0);
-    const totalAvailableCredit = credits.reduce((sum, c) => sum + c.availableCredit, 0);
-    
-    // Load transactions
-    const transactions = transactionStorage.getByUser(user.id, includeJoint);
-    const sortedTransactions = transactions
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 5);
-    setRecentTransactions(sortedTransactions);
+      // Load all data in parallel
+      const [accounts, credits, transactions, reminders] = await Promise.all([
+        accountStorage.getByUser(user.id, includeJoint),
+        creditStorage.getByUser(user.id, includeJoint),
+        transactionStorage.getByUser(user.id, includeJoint),
+        reminderStorage.getByUser(user.id, includeJoint)
+      ]);
+
+      const totalAccountBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0);
+      const totalCreditBalance = credits.reduce((sum, c) => sum + c.currentBalance, 0);
+      const totalAvailableCredit = credits.reduce((sum, c) => sum + (c.creditLimit - c.currentBalance), 0);
+      
+      const sortedTransactions = transactions
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 5);
+      setRecentTransactions(sortedTransactions);
 
     // Calculate stats
     const now = new Date();
@@ -185,24 +190,30 @@ function DashboardPage() {
       }
     }
 
-    setStats({
-      totalBalance: totalAccountBalance,
-      monthlyIncome: income,
-      monthlyExpenses: expenses,
-      savingsRate,
-      totalAccounts: accounts.length,
-      totalCredit: totalCreditBalance,
-      availableCredit: totalAvailableCredit,
-      predictedIncome,
-      predictedExpenses,
-    });
+      setStats({
+        totalBalance: totalAccountBalance,
+        monthlyIncome: income,
+        monthlyExpenses: expenses,
+        savingsRate,
+        totalAccounts: accounts.length,
+        totalCredit: totalCreditBalance,
+        availableCredit: totalAvailableCredit,
+        predictedIncome,
+        predictedExpenses,
+      });
 
-    // Load upcoming reminders
-    const reminders = reminderStorage.getAll()
-      .filter(r => !r.isCompleted && new Date(r.dueDate) >= now)
-      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-      .slice(0, 3);
-    setUpcomingReminders(reminders);
+      // Load upcoming reminders
+      const upcomingReminders = reminders
+        .filter(r => !r.isCompleted && new Date(r.dueDate) >= now)
+        .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+        .slice(0, 3);
+      setUpcomingReminders(upcomingReminders);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+      alert('Failed to load dashboard data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const formatDate = (date: Date) => {
@@ -219,6 +230,19 @@ function DashboardPage() {
   const formatDueDate = (date: Date) => {
     return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading dashboard...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
