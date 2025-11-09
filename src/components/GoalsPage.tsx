@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/auth';
-import { goalStorage, SavingsGoal, createTimestamp } from '../lib/storage-firestore';
+import { goalStorage, transactionStorage, SavingsGoal, Transaction, createTimestamp } from '../lib/storage-firestore';
 import { Target, Plus, Edit2, Trash2, TrendingUp } from 'lucide-react';
 
 export default function GoalsPage() {
   const { user, viewMode } = useAuth();
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingGoal, setEditingGoal] = useState<SavingsGoal | null>(null);
   const [loading, setLoading] = useState(true);
@@ -19,8 +20,12 @@ export default function GoalsPage() {
     setLoading(true);
     try {
       const includeJoint = viewMode === 'joint';
-      const data = await goalStorage.getByUser(user.id, includeJoint);
-      setGoals(data.sort((a, b) => new Date(a.targetDate).getTime() - new Date(b.targetDate).getTime()));
+      const [goalsData, transactionsData] = await Promise.all([
+        goalStorage.getByUser(user.id, includeJoint),
+        transactionStorage.getByUser(user.id, includeJoint)
+      ]);
+      setGoals(goalsData.sort((a, b) => new Date(a.targetDate).getTime() - new Date(b.targetDate).getTime()));
+      setTransactions(transactionsData);
     } catch (error) {
       console.error('Error loading goals:', error);
       alert('Failed to load goals. Please try again.');
@@ -114,6 +119,7 @@ export default function GoalsPage() {
             <GoalCard
               key={goal.id}
               goal={goal}
+              transactions={transactions.filter(t => t.savingsGoalId === goal.id)}
               onEdit={() => {
                 setEditingGoal(goal);
                 setShowAddModal(true);
@@ -146,11 +152,12 @@ export default function GoalsPage() {
 // Goal Card Component
 interface GoalCardProps {
   goal: SavingsGoal;
+  transactions: Transaction[];
   onEdit: () => void;
   onDelete: () => void;
 }
 
-function GoalCard({ goal, onEdit, onDelete }: GoalCardProps) {
+function GoalCard({ goal, transactions, onEdit, onDelete }: GoalCardProps) {
   const progress = (goal.currentAmount / goal.targetAmount) * 100;
   const remaining = goal.targetAmount - goal.currentAmount;
   const daysRemaining = Math.ceil((new Date(goal.targetDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
@@ -212,6 +219,27 @@ function GoalCard({ goal, onEdit, onDelete }: GoalCardProps) {
             <span className="font-semibold text-blue-600">₪{remaining.toFixed(2)}</span>
           </div>
         </div>
+
+        {/* Contributions from Transactions */}
+        {transactions.length > 0 && (
+          <div className="mb-4 pt-4 border-t border-gray-200">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">Recent Contributions</span>
+              <span className="text-xs text-gray-500">{transactions.length} transaction{transactions.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div className="space-y-1 max-h-24 overflow-y-auto">
+              {transactions.slice(0, 3).map(t => (
+                <div key={t.id} className="flex justify-between text-xs">
+                  <span className="text-gray-600 truncate mr-2">{t.description}</span>
+                  <span className="font-semibold text-green-600">+₪{t.amount.toFixed(2)}</span>
+                </div>
+              ))}
+              {transactions.length > 3 && (
+                <p className="text-xs text-gray-500 italic">+{transactions.length - 3} more...</p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Target Date */}
         <div className="pt-4 border-t border-gray-200">

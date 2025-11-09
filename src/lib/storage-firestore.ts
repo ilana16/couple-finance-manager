@@ -24,6 +24,7 @@ export interface Transaction {
   isJoint: boolean;
   notes?: string;
   attachments?: string[];
+  savingsGoalId?: string; // Optional: link transaction to a savings goal
   createdAt: string;
   updatedAt: string;
 }

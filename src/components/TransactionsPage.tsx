@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/auth';
-import { transactionStorage, accountStorage, creditStorage, Transaction, Account, CreditSource, createTimestamp } from '../lib/storage-firestore';
+import { transactionStorage, accountStorage, creditStorage, goalStorage, Transaction, Account, CreditSource, SavingsGoal, createTimestamp } from '../lib/storage-firestore';
 import { categoriesStorage } from '../lib/categories-storage';
 import { Plus, Search, Filter, Edit2, Trash2, Download, Upload } from 'lucide-react';
 
@@ -286,6 +286,7 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
   const { user, viewMode } = useAuth();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [creditSources, setCreditSources] = useState<CreditSource[]>([]);
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [expenseCategories, setExpenseCategories] = useState<string[]>([]);
   const [incomeCategories, setIncomeCategories] = useState<string[]>([]);
   
@@ -306,6 +307,7 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
     recurringEndDate: transaction?.recurringEndDate ? new Date(transaction.recurringEndDate).toISOString().split('T')[0] : '',
     isJoint: transaction?.isJoint ?? true,
     notes: transaction?.notes || '',
+    savingsGoalId: transaction?.savingsGoalId || '',
   });
 
   useEffect(() => {
@@ -313,13 +315,15 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
       if (!user) return;
       try {
         const includeJoint = viewMode === 'joint';
-        const [accountsData, creditsData, categoriesData] = await Promise.all([
+        const [accountsData, creditsData, goalsData, categoriesData] = await Promise.all([
           accountStorage.getByUser(user.id, includeJoint),
           creditStorage.getByUser(user.id, includeJoint),
+          goalStorage.getByUser(user.id, includeJoint),
           categoriesStorage.getCategories()
         ]);
         setAccounts(accountsData);
         setCreditSources(creditsData);
+        setSavingsGoals(goalsData);
         setExpenseCategories(categoriesData?.expenseCategories || []);
         setIncomeCategories(categoriesData?.incomeCategories || []);
       } catch (error) {
@@ -354,6 +358,7 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
       recurringEndDate: formData.isRecurring && formData.recurringEndDate ? new Date(formData.recurringEndDate).toISOString() : undefined,
       isJoint: formData.isJoint,
       notes: formData.notes,
+      savingsGoalId: formData.savingsGoalId || undefined,
       createdAt: transaction?.createdAt || createTimestamp(),
       updatedAt: createTimestamp(),
     };
@@ -361,8 +366,30 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
     try {
       if (transaction) {
         await transactionStorage.update(transaction.id, data);
+        
+        // Update savings goal if changed
+        if (formData.savingsGoalId && formData.savingsGoalId !== transaction.savingsGoalId) {
+          const goal = savingsGoals.find(g => g.id === formData.savingsGoalId);
+          if (goal) {
+            await goalStorage.update(formData.savingsGoalId, {
+              currentAmount: goal.currentAmount + parseFloat(formData.amount),
+              updatedAt: createTimestamp()
+            });
+          }
+        }
       } else {
         await transactionStorage.create(data);
+        
+        // Update savings goal if selected
+        if (formData.savingsGoalId) {
+          const goal = savingsGoals.find(g => g.id === formData.savingsGoalId);
+          if (goal) {
+            await goalStorage.update(formData.savingsGoalId, {
+              currentAmount: goal.currentAmount + parseFloat(formData.amount),
+              updatedAt: createTimestamp()
+            });
+          }
+        }
         
         // Update account or credit balance
         if (formData.paymentMethod === 'debit' && formData.accountId) {
@@ -632,6 +659,25 @@ function TransactionModal({ transaction, onClose, onSave }: TransactionModalProp
               />
               <span className="text-sm font-medium text-gray-700">Joint Transaction</span>
             </label>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Add to Savings Goal (Optional)</label>
+            <select
+              value={formData.savingsGoalId}
+              onChange={(e) => setFormData({ ...formData, savingsGoalId: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">None - Don't add to savings</option>
+              {savingsGoals.map(goal => (
+                <option key={goal.id} value={goal.id}>
+                  {goal.name} (₪{goal.currentAmount.toFixed(2)} / ₪{goal.targetAmount.toFixed(2)})
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Transaction amount will be added to the selected savings goal
+            </p>
           </div>
 
           <div>
