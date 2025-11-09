@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/auth';
 import { Settings, Download, Upload, Trash2, Database, User, Shield } from 'lucide-react';
+import { categoriesStorage } from '../lib/categories-storage';
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -117,6 +118,7 @@ function ProfileSettings() {
 }
 
 function CategorySettings() {
+  const [loading, setLoading] = useState(true);
   // Default categories (used only if nothing is saved)
   const defaultExpenseCategories = [
     'Food',
@@ -145,71 +147,111 @@ function CategorySettings() {
   const [showAddIncomeForm, setShowAddIncomeForm] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
-  // Load categories from localStorage on mount
+  // Load categories from Firestore on mount
   useEffect(() => {
-    const savedExpenseCategories = localStorage.getItem('couple_fin_expense_categories');
-    const savedIncomeCategories = localStorage.getItem('couple_fin_income_categories');
-    
-    if (savedExpenseCategories) {
-      setExpenseCategories(JSON.parse(savedExpenseCategories));
-    } else {
-      // Save defaults if nothing exists
-      localStorage.setItem('couple_fin_expense_categories', JSON.stringify(defaultExpenseCategories));
-    }
-    
-    if (savedIncomeCategories) {
-      setIncomeCategories(JSON.parse(savedIncomeCategories));
-    } else {
-      // Save defaults if nothing exists
-      localStorage.setItem('couple_fin_income_categories', JSON.stringify(defaultIncomeCategories));
-    }
+    loadCategories();
   }, []);
 
-  const handleAddExpenseCategory = (e: React.FormEvent) => {
+  const loadCategories = async () => {
+    setLoading(true);
+    try {
+      const saved = await categoriesStorage.getCategories();
+      
+      if (saved) {
+        setExpenseCategories(saved.expenseCategories);
+        setIncomeCategories(saved.incomeCategories);
+      } else {
+        // Save defaults if nothing exists
+        await categoriesStorage.saveCategories(defaultIncomeCategories, defaultExpenseCategories);
+        setExpenseCategories(defaultExpenseCategories);
+        setIncomeCategories(defaultIncomeCategories);
+      }
+    } catch (error) {
+      console.error('Error loading categories:', error);
+      // Fallback to defaults on error
+      setExpenseCategories(defaultExpenseCategories);
+      setIncomeCategories(defaultIncomeCategories);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddExpenseCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newExpenseCategory.trim() && !expenseCategories.includes(newExpenseCategory.trim())) {
       const updated = [...expenseCategories, newExpenseCategory.trim()];
-      setExpenseCategories(updated);
-      setNewExpenseCategory('');
-      setShowAddExpenseForm(false);
-      localStorage.setItem('couple_fin_expense_categories', JSON.stringify(updated));
-      setSaveMessage('Expense category added and saved!');
-      setTimeout(() => setSaveMessage(''), 3000);
+      try {
+        await categoriesStorage.saveCategories(incomeCategories, updated);
+        setExpenseCategories(updated);
+        setNewExpenseCategory('');
+        setShowAddExpenseForm(false);
+        setSaveMessage('Expense category added and saved!');
+        setTimeout(() => setSaveMessage(''), 3000);
+      } catch (error) {
+        console.error('Error saving category:', error);
+        alert('Failed to save category. Please try again.');
+      }
     }
   };
 
-  const handleAddIncomeCategory = (e: React.FormEvent) => {
+  const handleAddIncomeCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newIncomeCategory.trim() && !incomeCategories.includes(newIncomeCategory.trim())) {
       const updated = [...incomeCategories, newIncomeCategory.trim()];
-      setIncomeCategories(updated);
-      setNewIncomeCategory('');
-      setShowAddIncomeForm(false);
-      localStorage.setItem('couple_fin_income_categories', JSON.stringify(updated));
-      setSaveMessage('Income category added and saved!');
-      setTimeout(() => setSaveMessage(''), 3000);
+      try {
+        await categoriesStorage.saveCategories(updated, expenseCategories);
+        setIncomeCategories(updated);
+        setNewIncomeCategory('');
+        setShowAddIncomeForm(false);
+        setSaveMessage('Income category added and saved!');
+        setTimeout(() => setSaveMessage(''), 3000);
+      } catch (error) {
+        console.error('Error saving category:', error);
+        alert('Failed to save category. Please try again.');
+      }
     }
   };
 
-  const handleDeleteExpenseCategory = (category: string) => {
+  const handleDeleteExpenseCategory = async (category: string) => {
     if (confirm(`Are you sure you want to delete the expense category "${category}"?`)) {
       const updated = expenseCategories.filter(c => c !== category);
-      setExpenseCategories(updated);
-      localStorage.setItem('couple_fin_expense_categories', JSON.stringify(updated));
-      setSaveMessage('Expense category deleted and saved!');
-      setTimeout(() => setSaveMessage(''), 3000);
+      try {
+        await categoriesStorage.saveCategories(incomeCategories, updated);
+        setExpenseCategories(updated);
+        setSaveMessage('Expense category deleted and saved!');
+        setTimeout(() => setSaveMessage(''), 3000);
+      } catch (error) {
+        console.error('Error deleting category:', error);
+        alert('Failed to delete category. Please try again.');
+      }
     }
   };
 
-  const handleDeleteIncomeCategory = (category: string) => {
+  const handleDeleteIncomeCategory = async (category: string) => {
     if (confirm(`Are you sure you want to delete the income category "${category}"?`)) {
       const updated = incomeCategories.filter(c => c !== category);
-      setIncomeCategories(updated);
-      localStorage.setItem('couple_fin_income_categories', JSON.stringify(updated));
-      setSaveMessage('Income category deleted and saved!');
-      setTimeout(() => setSaveMessage(''), 3000);
+      try {
+        await categoriesStorage.saveCategories(updated, expenseCategories);
+        setIncomeCategories(updated);
+        setSaveMessage('Income category deleted and saved!');
+        setTimeout(() => setSaveMessage(''), 3000);
+      } catch (error) {
+        console.error('Error deleting category:', error);
+        alert('Failed to delete category. Please try again.');
+      }
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading categories...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -382,6 +424,71 @@ function DataManagement() {
       setMigrationResult({ success: false, errors: [String(error)] });
     } finally {
       setMigrating(false);
+    }
+  };
+
+  const handleExportFirestoreData = async () => {
+    try {
+      // Import all storage modules
+      const { transactionStorage, budgetStorage, goalStorage, accountStorage, creditStorage } = await import('../lib/storage-firestore');
+      const { debtStorage } = await import('../lib/storage-firestore');
+      const { investmentStorage } = await import('../lib/storage-firestore');
+      const { noteStorage } = await import('../lib/storage-firestore');
+      const { reminderStorage } = await import('../lib/storage-firestore');
+      const { predictionsStorage } = await import('../lib/predictions-storage');
+      const { categoriesStorage } = await import('../lib/categories-storage');
+
+      // Fetch all data from Firestore
+      const [transactions, budgets, goals, accounts, credits, notes, reminders, categories] = await Promise.all([
+        transactionStorage.getAll(),
+        budgetStorage.getAll(),
+        goalStorage.getAll(),
+        accountStorage.getAll(),
+        creditStorage.getAll(),
+        noteStorage.getAll(),
+        reminderStorage.getAll(),
+        categoriesStorage.getCategories(),
+      ]);
+
+      // Get predictions for both users and joint
+      const [predictionsUser1, predictionsUser2, predictionsJoint] = await Promise.all([
+        predictionsStorage.getByUserId('user1'),
+        predictionsStorage.getByUserId('user2'),
+        predictionsStorage.getByUserId('joint'),
+      ]);
+
+      const data = {
+        transactions,
+        budgets,
+        goals,
+        accounts,
+        creditSources: credits,
+        notes,
+        reminders,
+        categories,
+        predictions: {
+          user1: predictionsUser1,
+          user2: predictionsUser2,
+          joint: predictionsJoint,
+        },
+        exportDate: new Date().toISOString(),
+        exportSource: 'firestore',
+      };
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `couple-finance-firestore-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      alert('Firestore data exported successfully!');
+    } catch (error) {
+      console.error('Error exporting Firestore data:', error);
+      alert('Failed to export Firestore data. Please try again.');
     }
   };
 
@@ -565,13 +672,22 @@ function DataManagement() {
                 <p className="text-sm text-green-700 mb-4">
                   Download all your financial data as a JSON file. Use this to backup your data or transfer it to another device.
                 </p>
-                <button
-                  onClick={handleExportData}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  <Download className="w-4 h-4 inline-block mr-2" />
-                  Export All Data
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleExportFirestoreData}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    <Download className="w-4 h-4 inline-block mr-2" />
+                    Export Cloud Data
+                  </button>
+                  <button
+                    onClick={handleExportData}
+                    className="px-4 py-2 bg-green-100 text-green-700 border border-green-300 rounded-lg hover:bg-green-200 transition-colors"
+                  >
+                    <Download className="w-4 h-4 inline-block mr-2" />
+                    Export Local Data
+                  </button>
+                </div>
               </div>
             </div>
           </div>
