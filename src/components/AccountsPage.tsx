@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, DollarSign, Building2 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
-import { accountStorage, Account } from '../lib/storage';
+import { accountStorage, Account, createTimestamp } from '../lib/storage-firestore';
 import { formatCurrency, getCurrencySymbol, convertCurrency, Currency } from '../lib/currencyUtils';
 
 export default function AccountsPage() {
@@ -10,22 +10,36 @@ export default function AccountsPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [displayCurrency, setDisplayCurrency] = useState<Currency>('NIS');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadAccounts();
   }, [user, viewMode]);
 
-  const loadAccounts = () => {
+  const loadAccounts = async () => {
     if (!user) return;
-    const includeJoint = viewMode === 'joint';
-    const userAccounts = accountStorage.getByUser(user.id, includeJoint);
-    setAccounts(userAccounts);
+    setLoading(true);
+    try {
+      const includeJoint = viewMode === 'joint';
+      const userAccounts = await accountStorage.getByUser(user.id, includeJoint);
+      setAccounts(userAccounts);
+    } catch (error) {
+      console.error('Error loading accounts:', error);
+      alert('Failed to load accounts. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     if (confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
-      accountStorage.delete(id);
-      loadAccounts();
+      try {
+        await accountStorage.delete(id);
+        await loadAccounts();
+      } catch (error) {
+        console.error('Error deleting account:', error);
+        alert('Failed to delete account. Please try again.');
+      }
     }
   };
 
@@ -60,6 +74,19 @@ export default function AccountsPage() {
     total: accs.reduce((sum, acc) => sum + acc.balance, 0),
     count: accs.length,
   }));
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading accounts...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -228,21 +255,30 @@ function AccountModal({ account, onClose, userId }: { account: Account | null; o
     notes: account?.notes || '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (account) {
-      // Update existing account
-      accountStorage.update(account.id, formData);
-    } else {
-      // Create new account
-      accountStorage.create({
-        ...formData,
-        userId,
-      });
+    try {
+      if (account) {
+        // Update existing account
+        await accountStorage.update(account.id, {
+          ...formData,
+          updatedAt: createTimestamp(),
+        });
+      } else {
+        // Create new account
+        await accountStorage.create({
+          ...formData,
+          userId,
+          createdAt: createTimestamp(),
+          updatedAt: createTimestamp(),
+        });
+      }
+      onClose();
+    } catch (error) {
+      console.error('Error saving account:', error);
+      alert('Failed to save account. Please try again.');
     }
-
-    onClose();
   };
 
   return (

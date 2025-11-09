@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/auth';
-import { goalStorage, SavingsGoal } from '../lib/storage';
+import { goalStorage, SavingsGoal, createTimestamp } from '../lib/storage-firestore';
 import { Target, Plus, Edit2, Trash2, TrendingUp } from 'lucide-react';
 
 export default function GoalsPage() {
@@ -8,28 +8,55 @@ export default function GoalsPage() {
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingGoal, setEditingGoal] = useState<SavingsGoal | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadGoals();
   }, [user, viewMode]);
 
-  const loadGoals = () => {
+  const loadGoals = async () => {
     if (!user) return;
-    const includeJoint = viewMode === 'joint';
-    const data = goalStorage.getByUser(user.id, includeJoint);
-    setGoals(data.sort((a, b) => new Date(a.targetDate).getTime() - new Date(b.targetDate).getTime()));
+    setLoading(true);
+    try {
+      const includeJoint = viewMode === 'joint';
+      const data = await goalStorage.getByUser(user.id, includeJoint);
+      setGoals(data.sort((a, b) => new Date(a.targetDate).getTime() - new Date(b.targetDate).getTime()));
+    } catch (error) {
+      console.error('Error loading goals:', error);
+      alert('Failed to load goals. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this goal?')) {
-      goalStorage.delete(id);
-      loadGoals();
+      try {
+        await goalStorage.delete(id);
+        await loadGoals();
+      } catch (error) {
+        console.error('Error deleting goal:', error);
+        alert('Failed to delete goal. Please try again.');
+      }
     }
   };
 
   const totalTargetAmount = goals.reduce((sum, g) => sum + g.targetAmount, 0);
   const totalCurrentAmount = goals.reduce((sum, g) => sum + g.currentAmount, 0);
   const overallProgress = totalTargetAmount > 0 ? (totalCurrentAmount / totalTargetAmount) * 100 : 0;
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading goals...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -232,7 +259,7 @@ function GoalModal({ goal, onClose, onSave }: GoalModalProps) {
     isJoint: goal?.isJoint ?? true,
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
@@ -241,18 +268,24 @@ function GoalModal({ goal, onClose, onSave }: GoalModalProps) {
       name: formData.name,
       targetAmount: parseFloat(formData.targetAmount),
       currentAmount: parseFloat(formData.currentAmount),
-      targetDate: new Date(formData.targetDate),
+      targetDate: new Date(formData.targetDate).toISOString(),
       priority: formData.priority,
       isJoint: formData.isJoint,
+      createdAt: goal?.createdAt || createTimestamp(),
+      updatedAt: createTimestamp(),
     };
 
-    if (goal) {
-      goalStorage.update(goal.id, data);
-    } else {
-      goalStorage.create(data);
+    try {
+      if (goal) {
+        await goalStorage.update(goal.id, data);
+      } else {
+        await goalStorage.create(data);
+      }
+      onSave();
+    } catch (error) {
+      console.error('Error saving goal:', error);
+      alert('Failed to save goal. Please try again.');
     }
-
-    onSave();
   };
 
   return (

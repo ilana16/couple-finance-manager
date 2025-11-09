@@ -116,9 +116,13 @@ export interface Account {
   id: string;
   userId: string;
   name: string;
-  type: 'checking' | 'savings' | 'investment' | 'other';
+  type: 'checking' | 'savings' | 'cash' | 'other';
   balance: number;
+  currency: 'NIS' | 'USD' | 'EUR' | 'GBP' | 'JPY' | 'CAD' | 'AUD' | 'CHF';
   isJoint: boolean;
+  institution?: string;
+  accountNumber?: string;
+  notes?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -127,10 +131,17 @@ export interface CreditSource {
   id: string;
   userId: string;
   name: string;
+  type: 'credit_card' | 'line_of_credit' | 'loan' | 'other';
   creditLimit: number;
   currentBalance: number;
-  interestRate: number;
+  interestRate?: number;
+  paymentDayOfMonth: number;
+  paymentOption: 'pay_all' | 'custom_amount';
+  customPaymentAmount?: number;
   isJoint: boolean;
+  institution?: string;
+  accountNumber?: string;
+  notes?: string;
   createdAt: string;
   updatedAt: string;
 }

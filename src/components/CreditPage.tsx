@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, CreditCard, DollarSign, Calendar } from 'lucide-react';
 import { useAuth } from '../lib/auth';
-import { creditStorage, accountStorage, CreditSource, Account } from '../lib/storage';
+import { creditStorage, accountStorage, CreditSource, Account, createTimestamp } from '../lib/storage-firestore';
 
 export default function CreditPage() {
   const { user, viewMode } = useAuth();
@@ -11,24 +11,40 @@ export default function CreditPage() {
   const [editingCredit, setEditingCredit] = useState<CreditSource | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [payingCredit, setPayingCredit] = useState<CreditSource | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadData();
   }, [user, viewMode]);
 
-  const loadData = () => {
+  const loadData = async () => {
     if (!user) return;
-    const includeJoint = viewMode === 'joint';
-    const userCredits = creditStorage.getByUser(user.id, includeJoint);
-    const userAccounts = accountStorage.getByUser(user.id, includeJoint);
-    setCreditSources(userCredits);
-    setAccounts(userAccounts);
+    setLoading(true);
+    try {
+      const includeJoint = viewMode === 'joint';
+      const [userCredits, userAccounts] = await Promise.all([
+        creditStorage.getByUser(user.id, includeJoint),
+        accountStorage.getByUser(user.id, includeJoint)
+      ]);
+      setCreditSources(userCredits);
+      setAccounts(userAccounts);
+    } catch (error) {
+      console.error('Error loading credit data:', error);
+      alert('Failed to load credit data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     if (confirm(`Are you sure you want to delete "${name}"?`)) {
-      creditStorage.delete(id);
-      loadData();
+      try {
+        await creditStorage.delete(id);
+        await loadData();
+      } catch (error) {
+        console.error('Error deleting credit source:', error);
+        alert('Failed to delete credit source. Please try again.');
+      }
     }
   };
 
@@ -56,8 +72,21 @@ export default function CreditPage() {
 
   const totalCreditLimit = creditSources.reduce((sum, c) => sum + c.creditLimit, 0);
   const totalBalance = creditSources.reduce((sum, c) => sum + c.currentBalance, 0);
-  const totalAvailable = creditSources.reduce((sum, c) => sum + c.availableCredit, 0);
+  const totalAvailable = creditSources.reduce((sum, c) => sum + (c.creditLimit - c.currentBalance), 0);
   const utilizationRate = totalCreditLimit > 0 ? (totalBalance / totalCreditLimit) * 100 : 0;
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading credit sources...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -170,7 +199,7 @@ export default function CreditPage() {
                     </div>
                     <div>
                       <p className="text-xs text-gray-600 mb-1">Available</p>
-                      <p className="text-lg font-semibold text-green-600">₪{credit.availableCredit.toFixed(2)}</p>
+                      <p className="text-lg font-semibold text-green-600">₪{(credit.creditLimit - credit.currentBalance).toFixed(2)}</p>
                     </div>
                   </div>
 
@@ -291,19 +320,28 @@ function CreditModal({ credit, onClose, userId }: { credit: CreditSource | null;
     notes: credit?.notes || '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (credit) {
-      creditStorage.update(credit.id, formData);
-    } else {
-      creditStorage.create({
-        ...formData,
-        userId,
-      });
+    try {
+      if (credit) {
+        await creditStorage.update(credit.id, {
+          ...formData,
+          updatedAt: createTimestamp(),
+        });
+      } else {
+        await creditStorage.create({
+          ...formData,
+          userId,
+          createdAt: createTimestamp(),
+          updatedAt: createTimestamp(),
+        });
+      }
+      onClose();
+    } catch (error) {
+      console.error('Error saving credit source:', error);
+      alert('Failed to save credit source. Please try again.');
     }
-
-    onClose();
   };
 
   return (
@@ -518,15 +556,28 @@ function PaymentModal({ credit, accounts, onClose }: { credit: CreditSource; acc
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
   const canAfford = selectedAccount ? selectedAccount.balance >= paymentAmount : false;
 
-  const handlePayment = () => {
+  const handlePayment = async () => {
     if (!selectedAccountId || !canAfford) return;
 
-    const success = creditStorage.makePayment(credit.id, selectedAccountId);
-    
-    if (success) {
+    try {
+      // Update credit balance
+      await creditStorage.update(credit.id, {
+        currentBalance: credit.currentBalance - paymentAmount,
+        updatedAt: createTimestamp(),
+      });
+
+      // Update account balance
+      if (selectedAccount) {
+        await accountStorage.update(selectedAccountId, {
+          balance: selectedAccount.balance - paymentAmount,
+          updatedAt: createTimestamp(),
+        });
+      }
+
       alert(`Payment of ₪${paymentAmount.toFixed(2)} successful!`);
       onClose();
-    } else {
+    } catch (error) {
+      console.error('Error processing payment:', error);
       alert('Payment failed. Please try again.');
     }
   };
